@@ -135,10 +135,7 @@ mod tests {
     #[test]
     fn osc_133_b_is_the_command_input_anchor() {
         let anchor = reduce_input_anchor(None, 'B', 10, 8);
-        assert_eq!(
-            anchor,
-            Some(InputAnchor { line: 10, x: 8 })
-        );
+        assert_eq!(anchor, Some(InputAnchor { line: 10, x: 8 }));
         assert_eq!(reduce_input_anchor(anchor.clone(), 'A', 11, 0), anchor);
         assert_eq!(reduce_input_anchor(anchor.clone(), 'C', 12, 0), None);
         assert_eq!(reduce_input_anchor(anchor, 'D', 13, 0), None);

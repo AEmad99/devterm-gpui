@@ -230,8 +230,21 @@ fn is_mutating(scan: &str) -> bool {
     let lower = scan.to_ascii_lowercase();
     let b = lower.as_bytes();
     const VERBS: &[&[u8]] = &[
-        b"rm", b"mv", b"cp", b"touch", b"mkdir", b"rmdir", b"chmod", b"chown", b"chattr", b"ln",
-        b"kill", b"pkill", b"tee", b"truncate", b"unlink",
+        b"rm",
+        b"mv",
+        b"cp",
+        b"touch",
+        b"mkdir",
+        b"rmdir",
+        b"chmod",
+        b"chown",
+        b"chattr",
+        b"ln",
+        b"kill",
+        b"pkill",
+        b"tee",
+        b"truncate",
+        b"unlink",
     ];
     if VERBS.iter().any(|w| has_word(b, w)) {
         return true;
@@ -248,7 +261,11 @@ fn is_mutating(scan: &str) -> bool {
     if systemctl_sub(b, &["start", "restart", "enable"]) {
         return true;
     }
-    if verb_sub(b, &["oc", "kubectl"], &["apply", "create", "scale", "edit", "patch"]) {
+    if verb_sub(
+        b,
+        &["oc", "kubectl"],
+        &["apply", "create", "scale", "edit", "patch"],
+    ) {
         return true;
     }
     if verb_sub(b, &["git"], &["push", "reset", "clean"]) {
@@ -530,7 +547,11 @@ pub const BROWSER_TOOLS: &[&str] = &[
 ];
 
 /// Browser and preview registration defaults on; host tools are remote-only.
-pub fn registered_tools(host_tools: bool, browser_enabled: bool, handoff_enabled: bool) -> Vec<&'static str> {
+pub fn registered_tools(
+    host_tools: bool,
+    browser_enabled: bool,
+    handoff_enabled: bool,
+) -> Vec<&'static str> {
     let mut names = Vec::new();
     if host_tools {
         names.extend_from_slice(HOST_TOOLS);
@@ -752,7 +773,10 @@ mod tests {
 
     #[test]
     fn heredoc_and_piped_rm() {
-        let v = r("cat <<EOF | dd of=/dev/sda\nstuff\nEOF", PolicyMode::ReadOnly);
+        let v = r(
+            "cat <<EOF | dd of=/dev/sda\nstuff\nEOF",
+            PolicyMode::ReadOnly,
+        );
         assert!(!v.allow);
         let v = r("find . -name x | xargs rm -f", PolicyMode::ReadOnly);
         assert!(!v.allow);

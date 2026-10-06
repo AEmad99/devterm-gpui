@@ -461,7 +461,9 @@ pub fn windows_exec_is_serialized(os: &str) -> bool {
 pub enum ShellLaunch {
     PtyShell,
     /// Interactive PowerShell exec, falling back to `cmd.exe`. Never `client.shell()`.
-    WindowsExec { fallback_cmd_exe: bool },
+    WindowsExec {
+        fallback_cmd_exe: bool,
+    },
 }
 
 pub fn shell_launch(os: &str) -> ShellLaunch {
@@ -539,7 +541,10 @@ pub fn on_shell_channel_close(session: &mut ShellSessionFlags, now_ms: u64) -> S
     if !session.session_is_current || !session.client_is_current || session.closing {
         return ShellCloseOutcome::Ignored;
     }
-    if session.tmux_client_running && session.client_is_current && !session.closing && !session.reconnecting
+    if session.tmux_client_running
+        && session.client_is_current
+        && !session.closing
+        && !session.reconnecting
     {
         return ShellCloseOutcome::ResumeAfterTmux;
     }
@@ -549,7 +554,10 @@ pub fn on_shell_channel_close(session: &mut ShellSessionFlags, now_ms: u64) -> S
     ShellCloseOutcome::ReportExit
 }
 
-fn schedule_windows_shell_recovery(session: &mut ShellSessionFlags, now_ms: u64) -> ShellCloseOutcome {
+fn schedule_windows_shell_recovery(
+    session: &mut ShellSessionFlags,
+    now_ms: u64,
+) -> ShellCloseOutcome {
     if session.recovery_timer_pending
         || session.closing
         || session.reconnecting
@@ -588,7 +596,10 @@ pub enum RecoveryTimerOutcome {
     Reopen { message: String, attempt: u32 },
 }
 
-pub fn on_shell_recovery_timer(session: &mut ShellSessionFlags, attempt: u32) -> RecoveryTimerOutcome {
+pub fn on_shell_recovery_timer(
+    session: &mut ShellSessionFlags,
+    attempt: u32,
+) -> RecoveryTimerOutcome {
     session.recovery_timer_pending = false;
     if !session.session_is_current
         || session.closing
@@ -610,7 +621,10 @@ pub fn on_shell_recovery_timer(session: &mut ShellSessionFlags, attempt: u32) ->
 /// transport-close path can reconnect. Returns the banner, or `None` when the
 /// session is no longer the current one.
 pub fn on_shell_recovery_open_failed(session: &ShellSessionFlags, err: &str) -> Option<String> {
-    if !session.session_is_current || session.closing || session.reconnecting || !session.client_is_current
+    if !session.session_is_current
+        || session.closing
+        || session.reconnecting
+        || !session.client_is_current
     {
         return None;
     }
@@ -1114,7 +1128,9 @@ mod tests {
         let mut session = ShellSessionFlags::default();
         let _ = on_shell_channel_close(&mut session, 5);
         let failed = on_shell_recovery_open_failed(&session, "no shell channel").unwrap();
-        assert!(failed.contains("Windows shell recovery failed: no shell channel; reconnecting SSH"));
+        assert!(
+            failed.contains("Windows shell recovery failed: no shell channel; reconnecting SSH")
+        );
         assert!(recovery_open_failure_ends_transport());
         session.closing = true;
         assert!(on_shell_recovery_open_failed(&session, "no shell channel").is_none());
@@ -1157,7 +1173,10 @@ mod tests {
     #[test]
     fn does_not_double_wrap_an_encoded_command() {
         let command = powershell_encoded_command("Get-Location");
-        assert_eq!(wrap_windows_remote_command(&command, Some(r"C:\Users")), command);
+        assert_eq!(
+            wrap_windows_remote_command(&command, Some(r"C:\Users")),
+            command
+        );
         assert!(path_is_absolute_hint(r"C:\Users"));
     }
 }

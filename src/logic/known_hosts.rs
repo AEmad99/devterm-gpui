@@ -371,7 +371,10 @@ impl<'a> Parser<'a> {
         if self.peek() == Some(b'-') {
             self.index += 1;
         }
-        while matches!(self.peek(), Some(b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')) {
+        while matches!(
+            self.peek(),
+            Some(b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
+        ) {
             self.index += 1;
         }
         let text = std::str::from_utf8(&self.bytes[start..self.index]).ok()?;
@@ -510,7 +513,12 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("devterm-kh-{}-{}-{}", std::process::id(), nanos, name))
+        std::env::temp_dir().join(format!(
+            "devterm-kh-{}-{}-{}",
+            std::process::id(),
+            nanos,
+            name
+        ))
     }
 
     #[test]

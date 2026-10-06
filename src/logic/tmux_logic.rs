@@ -168,7 +168,11 @@ fn strip_preview_controls(raw: &str) -> String {
     raw.chars()
         .filter(|ch| {
             let code = *ch as u32;
-            !((code <= 0x08) || code == 0x0b || code == 0x0c || (0x0e..=0x1f).contains(&code) || code == 0x7f)
+            !((code <= 0x08)
+                || code == 0x0b
+                || code == 0x0c
+                || (0x0e..=0x1f).contains(&code)
+                || code == 0x7f)
         })
         .collect()
 }
@@ -196,11 +200,7 @@ pub fn sanitize_tmux_name(raw: &str) -> String {
             collapsed.push(ch);
         }
     }
-    collapsed
-        .trim_matches('-')
-        .chars()
-        .take(48)
-        .collect()
+    collapsed.trim_matches('-').chars().take(48).collect()
 }
 
 pub fn default_tmux_name(session_id: &str) -> String {
@@ -313,7 +313,10 @@ pub fn apply_tmux_previews(sessions: &mut [TmuxSessionInfo], stdout: &str) {
         let body = body.replace('\r', "");
         let lines: Vec<&str> = body.split('\n').collect();
         let mut start = 0;
-        if lines.first().is_some_and(|line| line.starts_with("__DT_WINS ")) {
+        if lines
+            .first()
+            .is_some_and(|line| line.starts_with("__DT_WINS "))
+        {
             let raw = lines[0]["__DT_WINS ".len()..].trim();
             if !raw.is_empty() {
                 session.window_list = Some(
@@ -428,10 +431,17 @@ pub fn parse_tmux_clients(stdout: &str) -> Vec<TmuxClientInfo> {
             continue;
         }
         let parts: Vec<&str> = trimmed.split('\t').collect();
-        let Some(tty) = parts.first().map(|part| part.trim()).filter(|part| !part.is_empty()) else {
+        let Some(tty) = parts
+            .first()
+            .map(|part| part.trim())
+            .filter(|part| !part.is_empty())
+        else {
             continue;
         };
-        let Some(session) = parts.get(1).map(|part| part.trim()).filter(|part| !part.is_empty())
+        let Some(session) = parts
+            .get(1)
+            .map(|part| part.trim())
+            .filter(|part| !part.is_empty())
         else {
             continue;
         };
@@ -457,7 +467,10 @@ pub fn pick_client_tty(clients: &[TmuxClientInfo], session_name: &str) -> Option
         if client.session != session_name {
             continue;
         }
-        if best.map(|current| client.activity > current.activity).unwrap_or(true) {
+        if best
+            .map(|current| client.activity > current.activity)
+            .unwrap_or(true)
+        {
             best = Some(client);
         }
     }
@@ -673,12 +686,10 @@ mod tests {
     #[test]
     fn detached_bootstrap_targets_a_stable_name_and_never_execs() {
         let script = build_detached_session_bootstrap("35148259-faae-4338-b3dc-0146a4b93a79");
-        assert!(script.contains(
-            "tmux new-session -Ad -s 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"
-        ));
-        assert!(script.contains(
-            "tmux attach-session -t 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"
-        ));
+        assert!(script
+            .contains("tmux new-session -Ad -s 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"));
+        assert!(script
+            .contains("tmux attach-session -t 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"));
         assert!(!contains_exec_tmux(&script));
     }
 
@@ -731,8 +742,12 @@ mod tests {
 
     #[test]
     fn picks_the_most_recently_active_client_for_a_session() {
-        let clients = parse_tmux_clients("/dev/pts/3\tops\t10\n/dev/pts/5\tops\t99\n/dev/pts/2\tdev\t50\n");
-        assert_eq!(pick_client_tty(&clients, "ops").as_deref(), Some("/dev/pts/5"));
+        let clients =
+            parse_tmux_clients("/dev/pts/3\tops\t10\n/dev/pts/5\tops\t99\n/dev/pts/2\tdev\t50\n");
+        assert_eq!(
+            pick_client_tty(&clients, "ops").as_deref(),
+            Some("/dev/pts/5")
+        );
         assert_eq!(pick_client_tty(&clients, "missing"), None);
     }
 

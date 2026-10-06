@@ -8,9 +8,34 @@
 #![allow(dead_code)]
 
 const ALLOWED_TAGS: &[&str] = &[
-    "h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "blockquote", "pre", "code",
-    "table", "thead", "tbody", "tr", "th", "td", "a", "img", "em", "strong", "del", "hr", "br",
-    "input", "span",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "pre",
+    "code",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "a",
+    "img",
+    "em",
+    "strong",
+    "del",
+    "hr",
+    "br",
+    "input",
+    "span",
 ];
 
 const ALLOWED_ATTR: &[&str] = &[
@@ -317,7 +342,10 @@ fn is_list_item(line: &str) -> bool {
 
 fn list_body(line: &str) -> String {
     let t = line.trim_start();
-    if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")).or_else(|| t.strip_prefix("+ "))
+    if let Some(rest) = t
+        .strip_prefix("- ")
+        .or_else(|| t.strip_prefix("* "))
+        .or_else(|| t.strip_prefix("+ "))
     {
         return rest.to_string();
     }
@@ -406,7 +434,12 @@ fn markdown_to_html(src: &str) -> String {
             continue;
         }
         if is_list_item(line) {
-            let ordered = line.trim_start().chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+            let ordered = line
+                .trim_start()
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false);
             let tag = if ordered { "ol" } else { "ul" };
             out.push_str(&format!("<{tag}>\n"));
             while i < lines.len() && is_list_item(lines[i]) {
@@ -415,7 +448,10 @@ fn markdown_to_html(src: &str) -> String {
                 if let Some(rest) = body.strip_prefix("[ ] ") {
                     out.push_str("<input disabled=\"\" type=\"checkbox\"> ");
                     out.push_str(&inline(rest));
-                } else if let Some(rest) = body.strip_prefix("[x] ").or_else(|| body.strip_prefix("[X] ")) {
+                } else if let Some(rest) = body
+                    .strip_prefix("[x] ")
+                    .or_else(|| body.strip_prefix("[X] "))
+                {
                     out.push_str("<input checked=\"\" disabled=\"\" type=\"checkbox\"> ");
                     out.push_str(&inline(rest));
                 } else if body == "[ ]" || body == "[x]" || body == "[X]" {
@@ -508,9 +544,9 @@ fn sanitize(input: &str) -> String {
         out.push('<');
         out.push_str(&lname);
         if lname == "input" {
-            let checked = attrs.iter().any(|(k, v)| {
-                k.eq_ignore_ascii_case("checked") && v.as_deref() != Some("false")
-            });
+            let checked = attrs
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case("checked") && v.as_deref() != Some("false"));
             if checked {
                 out.push_str(" checked=\"\"");
             }
@@ -551,7 +587,9 @@ fn sanitize(input: &str) -> String {
                 if key == "id" {
                     let value = v.clone().unwrap_or_default();
                     let heading = matches!(lname.as_str(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6");
-                    let slug = value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                    let slug = value
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
                         && !value.is_empty();
                     if !heading || !slug {
                         continue;
@@ -636,7 +674,9 @@ fn parse_start_tag(
             return Some((name, attrs, true, j + 2));
         }
         let name_start = j;
-        while j < chars.len() && (chars[j].is_ascii_alphanumeric() || chars[j] == '-' || chars[j] == ':') {
+        while j < chars.len()
+            && (chars[j].is_ascii_alphanumeric() || chars[j] == '-' || chars[j] == ':')
+        {
             j += 1;
         }
         if j == name_start {
@@ -685,9 +725,11 @@ fn skip_until_close(chars: &[char], from: usize, name: &str) -> usize {
     let close_chars: Vec<char> = close.chars().collect();
     let mut i = from;
     while i + close_chars.len() <= chars.len() {
-        if chars[i..i + close_chars.len()].iter().zip(close_chars.iter()).all(|(a, b)| {
-            a.to_ascii_lowercase() == *b
-        }) {
+        if chars[i..i + close_chars.len()]
+            .iter()
+            .zip(close_chars.iter())
+            .all(|(a, b)| a.to_ascii_lowercase() == *b)
+        {
             let mut j = i + close_chars.len();
             while j < chars.len() && chars[j] != '>' {
                 j += 1;
@@ -737,7 +779,10 @@ mod tests {
     #[test]
     fn renders_headings_with_deterministic_ids() {
         let html = render_markdown_to_safe_html("# Hello World!");
-        assert!(html.contains("<h1 id=\"hello-world\">Hello World!</h1>"), "{html}");
+        assert!(
+            html.contains("<h1 id=\"hello-world\">Hello World!</h1>"),
+            "{html}"
+        );
     }
 
     #[test]
@@ -770,14 +815,21 @@ mod tests {
         let html = render_markdown_to_safe_html("- [ ] todo\n- [x] done");
         assert!(html.contains("<input"), "{html}");
         assert!(html.contains("type=\"checkbox\""), "{html}");
-        assert!(html.contains("disabled=\"\"") || html.contains("disabled"), "{html}");
-        assert!(html.contains("checked=\"\"") || html.contains("checked"), "{html}");
+        assert!(
+            html.contains("disabled=\"\"") || html.contains("disabled"),
+            "{html}"
+        );
+        assert!(
+            html.contains("checked=\"\"") || html.contains("checked"),
+            "{html}"
+        );
         assert!(!html.contains("enabled"), "{html}");
     }
 
     #[test]
     fn removes_script_tags_and_inline_event_handlers() {
-        let html = render_markdown_to_safe_html("<script>alert(1)</script>\n<img src=x onerror=alert(1)>");
+        let html =
+            render_markdown_to_safe_html("<script>alert(1)</script>\n<img src=x onerror=alert(1)>");
         assert!(!html.contains("<script>"), "{html}");
         assert!(!html.contains("onerror"), "{html}");
         assert!(!html.contains("alert(1)"), "{html}");

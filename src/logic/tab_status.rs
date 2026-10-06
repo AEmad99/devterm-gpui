@@ -341,13 +341,31 @@ mod tests {
     #[test]
     fn tone_colors_match_the_theme_slots() {
         assert_eq!(tab_status_palette_slot(TabStatusTone::Warn), Some("yellow"));
-        assert_eq!(tab_status_palette_slot(TabStatusTone::Pending), Some("yellow"));
+        assert_eq!(
+            tab_status_palette_slot(TabStatusTone::Pending),
+            Some("yellow")
+        );
         assert_eq!(tab_status_palette_slot(TabStatusTone::Error), Some("red"));
-        assert_eq!(tab_status_palette_slot(TabStatusTone::Attention), Some("green"));
-        assert_eq!(tab_status_palette_slot(TabStatusTone::Running), Some("blue"));
-        assert_eq!(tab_status_palette_slot(TabStatusTone::Unread), Some("magenta"));
-        assert_eq!(tab_status_css_var(TabStatusTone::Error), Some("--tab-status-error"));
-        assert_eq!(tab_status_css_var(TabStatusTone::Unread), Some("--tab-status-unread"));
+        assert_eq!(
+            tab_status_palette_slot(TabStatusTone::Attention),
+            Some("green")
+        );
+        assert_eq!(
+            tab_status_palette_slot(TabStatusTone::Running),
+            Some("blue")
+        );
+        assert_eq!(
+            tab_status_palette_slot(TabStatusTone::Unread),
+            Some("magenta")
+        );
+        assert_eq!(
+            tab_status_css_var(TabStatusTone::Error),
+            Some("--tab-status-error")
+        );
+        assert_eq!(
+            tab_status_css_var(TabStatusTone::Unread),
+            Some("--tab-status-unread")
+        );
         assert_eq!(tab_status_css_var(TabStatusTone::Idle), None);
     }
 }

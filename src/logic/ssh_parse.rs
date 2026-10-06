@@ -52,7 +52,11 @@ fn strip_comment(line: &str) -> &str {
 
 fn strip_one_wrapping_quote(value: &str) -> String {
     let mut chars: Vec<char> = value.chars().collect();
-    if chars.first().copied().is_some_and(|c| c == '"' || c == '\'') {
+    if chars
+        .first()
+        .copied()
+        .is_some_and(|c| c == '"' || c == '\'')
+    {
         chars.remove(0);
     }
     if chars.last().copied().is_some_and(|c| c == '"' || c == '\'') {
@@ -202,10 +206,7 @@ pub fn parse_proxy_jump(raw: &str) -> Option<ParsedJump> {
 
 /// Parse a comma-separated ProxyJump list (capped at two extra hops).
 pub fn parse_proxy_jump_list(raw: &str) -> Vec<ParsedJump> {
-    raw.split(',')
-        .filter_map(parse_one_jump)
-        .take(2)
-        .collect()
+    raw.split(',').filter_map(parse_one_jump).take(2).collect()
 }
 
 /// Parse OpenSSH config text into concrete Host entries.
@@ -276,7 +277,8 @@ pub fn parse_ssh_config(text: &str) -> Vec<ParsedSshHost> {
                 },
                 _ => 22,
             };
-            let username = opt_nonempty(opts.get("user")).or_else(|| opt_nonempty(opts.get("username")));
+            let username =
+                opt_nonempty(opts.get("user")).or_else(|| opt_nonempty(opts.get("username")));
             let private_key_path = opt_nonempty(opts.get("identityfile"));
             let jump = if let Some(proxy) = opt_nonempty(opts.get("proxyjump")) {
                 let hops = parse_proxy_jump_list(&proxy);

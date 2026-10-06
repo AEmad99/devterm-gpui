@@ -71,7 +71,11 @@ pub fn list_jump_hops(jump: Option<&JumpSpec>) -> Vec<SshHop> {
 
 /// `Number(port) || 22` — zero and non-finite values become 22.
 fn normalize_port(port: i64) -> i64 {
-    if port == 0 { 22 } else { port }
+    if port == 0 {
+        22
+    } else {
+        port
+    }
 }
 
 /// Persist one hop as an object so existing connections.json stays compatible.

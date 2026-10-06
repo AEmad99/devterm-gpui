@@ -58,7 +58,10 @@ impl SearchIndex {
     pub fn new(max_lines: usize) -> Self {
         Self {
             index: Vec::new(),
-            max_lines: normalize_search_index_lines(Some(max_lines as f64), DEFAULT_SEARCH_INDEX_LINES),
+            max_lines: normalize_search_index_lines(
+                Some(max_lines as f64),
+                DEFAULT_SEARCH_INDEX_LINES,
+            ),
         }
     }
 
@@ -407,9 +410,7 @@ mod tests {
             persist_file_name("../../etc/passwd"),
             ".._.._etc_passwd.jsonl"
         );
-        let mut lines: Vec<String> = (0..PERSIST_MAX_LINES + 3)
-            .map(|i| i.to_string())
-            .collect();
+        let mut lines: Vec<String> = (0..PERSIST_MAX_LINES + 3).map(|i| i.to_string()).collect();
         cap_persisted_lines(&mut lines);
         assert_eq!(lines.len(), PERSIST_MAX_LINES);
         assert_eq!(lines[0], "3");

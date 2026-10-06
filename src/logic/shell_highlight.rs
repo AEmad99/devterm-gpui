@@ -67,7 +67,10 @@ fn take_string(src: &str) -> (&str, &str) {
 }
 
 fn match_operator(src: &str) -> Option<usize> {
-    if src.starts_with("&&") || src.starts_with("||") || src.starts_with(";;") || src.starts_with("<<")
+    if src.starts_with("&&")
+        || src.starts_with("||")
+        || src.starts_with(";;")
+        || src.starts_with("<<")
         || src.starts_with(">>")
     {
         return Some(2);
@@ -188,7 +191,8 @@ fn match_word(src: &str) -> Option<usize> {
     if b.is_empty() {
         return None;
     }
-    if b[0].is_ascii_whitespace() || matches!(b[0], b'\'' | b'"' | b'#' | b';' | b'|' | b'&' | b'<' | b'>')
+    if b[0].is_ascii_whitespace()
+        || matches!(b[0], b'\'' | b'"' | b'#' | b';' | b'|' | b'&' | b'<' | b'>')
     {
         return None;
     }
@@ -242,7 +246,8 @@ pub fn tokenize_shell(input: &str, dialect: ShellDialect) -> Vec<ShellToken> {
             rest = next;
             continue;
         }
-        if (dialect == ShellDialect::Powershell && rest.starts_with('#')) || rest.starts_with("<#") {
+        if (dialect == ShellDialect::Powershell && rest.starts_with('#')) || rest.starts_with("<#")
+        {
             tokens.push(ShellToken {
                 kind: ShellTokenKind::Comment,
                 text: rest.to_string(),

@@ -155,7 +155,10 @@ mod tests {
             false,
         ));
         assert!(!HIBERNATES_OS_PROCESS);
-        assert_eq!(normalize_hibernate_after_ms(None), DEFAULT_HIBERNATE_AFTER_MS);
+        assert_eq!(
+            normalize_hibernate_after_ms(None),
+            DEFAULT_HIBERNATE_AFTER_MS
+        );
         assert_eq!(normalize_output_ring_lines(Some(50.0), 10), 100);
         assert_eq!(
             normalize_output_ring_lines(Some(500_000.0), DEFAULT_OUTPUT_RING_LINES),

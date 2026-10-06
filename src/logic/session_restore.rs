@@ -27,7 +27,11 @@ pub fn restores_live_local_pty() -> bool {
     false
 }
 
-pub fn trim_session_scrollback(raw: &str, max_lines: Option<f64>, max_bytes: Option<f64>) -> String {
+pub fn trim_session_scrollback(
+    raw: &str,
+    max_lines: Option<f64>,
+    max_bytes: Option<f64>,
+) -> String {
     if raw.is_empty() {
         return String::new();
     }
@@ -112,7 +116,11 @@ pub fn apply_scrollback_budget(raws: &[String]) -> Vec<Option<String>> {
             continue;
         }
         let cap = remaining.min(MAX_PERSISTED_SCROLLBACK_BYTES);
-        let trimmed = trim_session_scrollback(raw, Some(DEFAULT_PERSISTED_SCROLLBACK_LINES as f64), Some(cap as f64));
+        let trimmed = trim_session_scrollback(
+            raw,
+            Some(DEFAULT_PERSISTED_SCROLLBACK_LINES as f64),
+            Some(cap as f64),
+        );
         if trimmed.is_empty() {
             out.push(None);
         } else {
@@ -144,9 +152,17 @@ pub fn needs_auth(draft: &SshDraft) -> bool {
         && draft.password.as_deref().map(str::is_empty).unwrap_or(true);
     let missing_passphrase = draft.auth_method == "key"
         && draft.has_passphrase
-        && draft.passphrase.as_deref().map(str::is_empty).unwrap_or(true);
+        && draft
+            .passphrase
+            .as_deref()
+            .map(str::is_empty)
+            .unwrap_or(true);
     let missing_none = draft.auth_method == "none"
-        && draft.private_key_path.as_deref().map(str::is_empty).unwrap_or(true)
+        && draft
+            .private_key_path
+            .as_deref()
+            .map(str::is_empty)
+            .unwrap_or(true)
         && draft.use_agent != Some(true);
     missing_password || missing_passphrase || missing_none
 }
@@ -231,16 +247,25 @@ pub fn snapshot_json_for_disk(snap: &RestoreSnapshot) -> String {
             }
             if let Some(draft) = &it.ssh_draft {
                 out.push_str(",\n          \"sshDraft\": {\n");
-                out.push_str(&format!("            \"host\": {},\n", json_str(&draft.host)));
+                out.push_str(&format!(
+                    "            \"host\": {},\n",
+                    json_str(&draft.host)
+                ));
                 out.push_str(&format!("            \"port\": {},\n", draft.port));
-                out.push_str(&format!("            \"username\": {},\n", json_str(&draft.username)));
+                out.push_str(&format!(
+                    "            \"username\": {},\n",
+                    json_str(&draft.username)
+                ));
                 out.push_str(&format!(
                     "            \"authMethod\": {}",
                     json_str(&draft.auth_method)
                 ));
                 if let Some(path) = &draft.private_key_path {
                     out.push_str(",\n");
-                    out.push_str(&format!("            \"privateKeyPath\": {}", json_str(path)));
+                    out.push_str(&format!(
+                        "            \"privateKeyPath\": {}",
+                        json_str(path)
+                    ));
                 }
                 if draft.has_passphrase {
                     out.push_str(",\n            \"hasPassphrase\": true");

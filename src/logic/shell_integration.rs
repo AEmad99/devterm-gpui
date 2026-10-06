@@ -28,8 +28,7 @@ pub const SHELL_INTEGRATION_READY_MARK_TMUX: &str =
 pub const STTY_DISABLE_ECHO: &str = "\u{15}stty -echo 2>/dev/null\n";
 
 /// Failsafe so operator typing is visible if the inject never confirms.
-pub const STTY_ENABLE_ECHO: &str =
-    "\u{15}stty echo 2>/dev/null; printf \"\\033[1A\\r\\033[2K\"\n";
+pub const STTY_ENABLE_ECHO: &str = "\u{15}stty echo 2>/dev/null; printf \"\\033[1A\\r\\033[2K\"\n";
 
 /// Wait for `stty -echo` to run before sending the payload on a slow SSH link.
 pub const QUIET_WRITE_GAP_MS: u64 = 180;
@@ -299,8 +298,7 @@ fn split_windows_drive(path: &str) -> Option<(String, &str)> {
         }
         return Some((path[1..2].to_ascii_uppercase(), &path[i..]));
     }
-    if bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b'/'
-    {
+    if bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b'/' {
         return Some((path[1..2].to_ascii_uppercase(), &path[3..]));
     }
     if bytes.len() == 2 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() {
@@ -320,8 +318,7 @@ fn split_windows_drive(path: &str) -> Option<(String, &str)> {
     if bytes.len() == 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
         return Some((path[0..1].to_ascii_uppercase(), ""));
     }
-    if bytes.len() == 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\'
-    {
+    if bytes.len() == 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\' {
         return Some((path[0..1].to_ascii_uppercase(), ""));
     }
     None
@@ -439,12 +436,10 @@ mod tests {
     #[test]
     fn bootstrap_uses_a_stable_sanitized_tmux_session_name() {
         let script = build_detached_session_bootstrap("35148259-faae-4338-b3dc-0146a4b93a79");
-        assert!(script.contains(
-            "tmux new-session -Ad -s 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"
-        ));
-        assert!(script.contains(
-            "tmux attach-session -t 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"
-        ));
+        assert!(script
+            .contains("tmux new-session -Ad -s 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"));
+        assert!(script
+            .contains("tmux attach-session -t 'devterm-35148259-faae-4338-b3dc-0146a4b93a79'"));
     }
 
     #[test]
@@ -532,9 +527,7 @@ mod tests {
         let mark_at = script.find("633;P;DevTermReady").unwrap();
         assert!(mark_at > echo_at);
         assert!(script.contains("printf '\\033]633;P;DevTermReady\\007'"));
-        assert!(script.contains(
-            "printf '\\033Ptmux;\\033\\033]633;P;DevTermReady\\007\\033\\\\'"
-        ));
+        assert!(script.contains("printf '\\033Ptmux;\\033\\033]633;P;DevTermReady\\007\\033\\\\'"));
         assert!(!script.contains("cd --"));
     }
 
@@ -572,10 +565,8 @@ mod tests {
 
     #[test]
     fn consume_strips_the_tmux_dcs_form() {
-        let out = consume_shell_integration_ready(
-            "",
-            &format!("x{SHELL_INTEGRATION_READY_MARK_TMUX}y"),
-        );
+        let out =
+            consume_shell_integration_ready("", &format!("x{SHELL_INTEGRATION_READY_MARK_TMUX}y"));
         assert!(out.ready);
         assert_eq!(out.text, "xy");
     }

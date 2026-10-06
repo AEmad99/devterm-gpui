@@ -78,7 +78,10 @@ fn has_akia(cmd: &str) -> bool {
         let boundary_before = i == 0 || !is_word(b[i - 1]);
         if boundary_before && b[i..].starts_with(b"AKIA") {
             let rest = &b[i + 4..i + 20];
-            if rest.iter().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+            if rest
+                .iter()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+            {
                 let after = i + 20;
                 if after == b.len() || !is_word(b[after]) {
                     return true;
@@ -282,7 +285,11 @@ pub fn merge_history(external_chrono: &[String], in_app: &[StoredEntry]) -> Hist
         .into_iter()
         .map(|(_, command, count)| CommandStat { command, count })
         .collect();
-    frequent.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.command.cmp(&b.command)));
+    frequent.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.command.cmp(&b.command))
+    });
     frequent.truncate(MAX_OUT);
     HistoryResult { recent, frequent }
 }
@@ -413,10 +420,7 @@ mod tests {
 
     #[test]
     fn newer_in_app_variant_wins() {
-        let h = merge_history(
-            &["git status".into()],
-            &[entry("GIT status", 1, 10)],
-        );
+        let h = merge_history(&["git status".into()], &[entry("GIT status", 1, 10)]);
         assert_eq!(h.recent, vec!["GIT status"]);
         assert_eq!(
             h.frequent,
@@ -469,10 +473,7 @@ mod tests {
 
     #[test]
     fn sums_counts_across_variants() {
-        let in_app = vec![
-            entry("git pull", 3, 1),
-            entry("GIT PULL", 2, 2),
-        ];
+        let in_app = vec![entry("git pull", 3, 1), entry("GIT PULL", 2, 2)];
         let h = merge_history(&["git pull".into()], &in_app);
         assert_eq!(h.recent, vec!["GIT PULL"]);
         assert_eq!(

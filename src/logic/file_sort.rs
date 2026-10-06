@@ -273,7 +273,10 @@ mod tests {
 
     #[test]
     fn sorts_names_naturally_and_case_insensitively() {
-        let es = vec![entry("file10.txt", false, 0, 0), entry("File2.txt", false, 0, 0)];
+        let es = vec![
+            entry("file10.txt", false, 0, 0),
+            entry("File2.txt", false, 0, 0),
+        ];
         assert_eq!(
             names(&sort_file_entries(&es, DEFAULT_FILE_SORT)),
             vec!["File2.txt", "file10.txt"]

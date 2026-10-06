@@ -117,13 +117,21 @@ impl PortForwardManager {
     }
 
     pub fn note_bytes_in(&mut self, id: &str, count: u64) {
-        if let Some(entry) = self.forwards.iter_mut().find(|entry| entry.forward.id == id) {
+        if let Some(entry) = self
+            .forwards
+            .iter_mut()
+            .find(|entry| entry.forward.id == id)
+        {
             entry.bytes_in += count;
         }
     }
 
     pub fn note_bytes_out(&mut self, id: &str, count: u64) {
-        if let Some(entry) = self.forwards.iter_mut().find(|entry| entry.forward.id == id) {
+        if let Some(entry) = self
+            .forwards
+            .iter_mut()
+            .find(|entry| entry.forward.id == id)
+        {
             entry.bytes_out += count;
         }
     }
@@ -175,7 +183,11 @@ impl PortForwardManager {
     pub fn list(&self, session_id: Option<&str>) -> Vec<PortForward> {
         self.forwards
             .iter()
-            .filter(|entry| session_id.map(|id| entry.forward.session_id == id).unwrap_or(true))
+            .filter(|entry| {
+                session_id
+                    .map(|id| entry.forward.session_id == id)
+                    .unwrap_or(true)
+            })
             .map(|entry| {
                 let mut forward = entry.forward.clone();
                 forward.bytes = entry.bytes_in + entry.bytes_out;
@@ -356,7 +368,15 @@ mod tests {
     fn rejects_a_forward_when_the_session_is_down_and_local_needs_a_target() {
         let mut manager = PortForwardManager::new();
         let err = manager
-            .add(false, "s1", PortForwardKind::Dynamic, 1080, None, None, |_| Ok(1080))
+            .add(
+                false,
+                "s1",
+                PortForwardKind::Dynamic,
+                1080,
+                None,
+                None,
+                |_| Ok(1080),
+            )
             .unwrap_err();
         assert_eq!(err, SSH_SESSION_NOT_CONNECTED);
         let err = manager
@@ -401,9 +421,15 @@ mod tests {
             )
             .unwrap();
         let dynamic = manager
-            .add(true, "s1", PortForwardKind::Dynamic, 1080, None, None, |port| {
-                Ok(port)
-            })
+            .add(
+                true,
+                "s1",
+                PortForwardKind::Dynamic,
+                1080,
+                None,
+                None,
+                |port| Ok(port),
+            )
             .unwrap();
         assert!(local.id.starts_with("pf-"));
         assert_eq!(local.local_port, 40000);
@@ -489,7 +515,9 @@ mod tests {
     fn dynamic_forward_does_not_require_a_remote_target() {
         let mut manager = PortForwardManager::new();
         let forward = manager
-            .add(true, "s", PortForwardKind::Dynamic, 0, None, None, |_| Ok(1080))
+            .add(true, "s", PortForwardKind::Dynamic, 0, None, None, |_| {
+                Ok(1080)
+            })
             .unwrap();
         assert_eq!(forward.kind.as_str(), "dynamic");
         assert_eq!(forward.remote_host, None);

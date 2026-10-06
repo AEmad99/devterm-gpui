@@ -84,7 +84,10 @@ pub struct LaunchSpec {
 
 impl LaunchSpec {
     pub fn env_get(&self, key: &str) -> Option<&str> {
-        self.env.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        self.env
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 
     pub fn cleanup(&self) {
@@ -231,7 +234,8 @@ fn isolated_agent_args(extension: Option<&str>, options: &LaunchExtras) -> Vec<S
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .or_else(|| {
-            prefs.map(|p| p.model.trim().to_string())
+            prefs
+                .map(|p| p.model.trim().to_string())
                 .filter(|s| !s.is_empty())
         });
     if let Some(model) = selected.clone() {
@@ -270,11 +274,15 @@ fn isolated_agent_args(extension: Option<&str>, options: &LaunchExtras) -> Vec<S
                 continue;
             }
             let path = Path::new(&skill.path);
-            let Ok(meta) = fs::metadata(path) else { continue };
+            let Ok(meta) = fs::metadata(path) else {
+                continue;
+            };
             if !meta.is_file() || meta.len() > 512 * 1024 {
                 continue;
             }
-            let Some(digest) = skill_digest(path) else { continue };
+            let Some(digest) = skill_digest(path) else {
+                continue;
+            };
             if digest != skill.sha256.to_lowercase() {
                 continue;
             }
@@ -287,7 +295,9 @@ fn isolated_agent_args(extension: Option<&str>, options: &LaunchExtras) -> Vec<S
         if seen.iter().any(|p| p == &path) {
             continue;
         }
-        let Some(digest) = skill_digest(Path::new(&path)) else { continue };
+        let Some(digest) = skill_digest(Path::new(&path)) else {
+            continue;
+        };
         if let Some(prefs) = prefs {
             if let Some(pinned) = prefs.trusted_skills.iter().find(|s| s.path == path) {
                 if !pinned.enabled || pinned.sha256.to_lowercase() != digest {
@@ -298,7 +308,12 @@ fn isolated_agent_args(extension: Option<&str>, options: &LaunchExtras) -> Vec<S
         args.push("--skill".into());
         args.push(path);
     }
-    if let Some(prompt) = options.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty()) {
+    if let Some(prompt) = options
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty())
+    {
         args.push(prompt.to_string());
     }
     args
@@ -307,7 +322,9 @@ fn isolated_agent_args(extension: Option<&str>, options: &LaunchExtras) -> Vec<S
 fn list_personal_markdown_skills() -> Vec<String> {
     let dir = PathBuf::from(home_dir()).join("DevTerm").join("skills");
     let mut out = Vec::new();
-    let Ok(rd) = fs::read_dir(&dir) else { return out };
+    let Ok(rd) = fs::read_dir(&dir) else {
+        return out;
+    };
     for ent in rd.flatten() {
         let name = ent.file_name().to_string_lossy().to_string();
         if !name.to_lowercase().ends_with(".md") {
@@ -366,7 +383,10 @@ fn finish_pi_launch(
     let mut env = vec![
         ("DEVTERM_BRIDGE_URL".into(), bridge.url.clone()),
         ("DEVTERM_BRIDGE_TOKEN".into(), bridge.token.clone()),
-        ("DEVTERM_MCP_DIR".into(), overlay.to_string_lossy().into_owned()),
+        (
+            "DEVTERM_MCP_DIR".into(),
+            overlay.to_string_lossy().into_owned(),
+        ),
     ];
     if bundled_cli.is_some() {
         let fallbacks = options
@@ -375,7 +395,10 @@ fn finish_pi_launch(
             .map(|p| &p.fallback_models)
             .cloned()
             .unwrap_or_default();
-        env.push(("DEVTERM_MODEL_FALLBACKS".into(), json_string_array(&fallbacks)));
+        env.push((
+            "DEVTERM_MODEL_FALLBACKS".into(),
+            json_string_array(&fallbacks),
+        ));
     }
     let prompt = options
         .initial_prompt
@@ -414,7 +437,12 @@ fn rebuild_with_append(extension: &str, options: &LaunchExtras, append_path: &st
         .unwrap_or(args.len());
     args.insert(insert_at, append_path.to_string());
     args.insert(insert_at, "--append-system-prompt".into());
-    if let Some(prompt) = options.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty()) {
+    if let Some(prompt) = options
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty())
+    {
         args.push(prompt.to_string());
     }
     args
@@ -502,7 +530,8 @@ fn working_dir_section(cwd: Option<&str>) -> String {
     let where_ = if let Some(cwd) = cwd {
         format!("Right now that is `{cwd}`.")
     } else {
-        "It is not reported yet — call `get_host_context` once the operator's shell is active.".into()
+        "It is not reported yet — call `get_host_context` once the operator's shell is active."
+            .into()
     };
     format!(
         "## Working directory\nYour host tools act in the **operator's current terminal directory**, which\ntracks their `cd` live — they don't need to spell out a path for \"here\". {where_}\n- `run_command` already executes in this directory.\n- Relative paths to `read_file` / `write_file` / `list_dir` resolve against it; pass an absolute path to act elsewhere.\n- The live value is the `cwd` field of `get_host_context` — re-check it rather than assuming it stayed put.\n"
@@ -626,7 +655,10 @@ pub fn resolve_on_posix(name: &str) -> Option<String> {
         return None;
     }
     let text = String::from_utf8_lossy(&out.stdout);
-    text.lines().map(str::trim).find(|l| !l.is_empty()).map(|s| s.to_string())
+    text.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(|s| s.to_string())
 }
 
 pub fn resolve_cached(name: &str, posix_fallback: &str) -> String {
@@ -696,14 +728,21 @@ pub fn codex_reasoning_effort(value: Option<&str>) -> Option<&'static str> {
 }
 
 pub fn resolve_codex_bin() -> String {
-    let standalone = PathBuf::from(home_dir()).join(".local").join("bin").join("codex");
+    let standalone = PathBuf::from(home_dir())
+        .join(".local")
+        .join("bin")
+        .join("codex");
     if standalone.exists() {
         return standalone.to_string_lossy().into_owned();
     }
     resolve_cached("codex", "codex")
 }
 
-pub fn prepare_codex_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_codex_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-codex-").expect("temp");
     let codex_home = overlay.join("codex-home");
     fs::create_dir_all(&codex_home).ok();
@@ -715,7 +754,11 @@ pub fn prepare_codex_launch(host_context_md: &str, bridge: &Bridge, extras: &Lau
         let _ = fs::copy(&user_auth, codex_home.join("auth.json"));
     }
     let native = extras.native_local;
-    let sandbox = if native { "workspace-write" } else { "read-only" };
+    let sandbox = if native {
+        "workspace-write"
+    } else {
+        "read-only"
+    };
     let toml = format!(
         "# DevTerm per-session isolated Codex config\nsandbox_mode = \"{sandbox}\"\nweb_search = \"disabled\"\n\n[history]\npersistence = \"none\"\n\n[features]\nshell_tool = {}\n\n[mcp_servers.devterm]\nenabled = true\nrequired = true\nurl = \"{}\"\n\n[mcp_servers.devterm.http_headers]\nAuthorization = \"Bearer {}\"\n",
         if native { "true" } else { "false" },
@@ -724,7 +767,12 @@ pub fn prepare_codex_launch(host_context_md: &str, bridge: &Bridge, extras: &Lau
     );
     write_secret(codex_home.join("config.toml"), &toml).ok();
     let mut args = vec!["--sandbox".into(), sandbox.into()];
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("-m".into());
         args.push(model.into());
     }
@@ -732,21 +780,35 @@ pub fn prepare_codex_launch(host_context_md: &str, bridge: &Bridge, extras: &Lau
         args.push("-c".into());
         args.push(format!("model_reasoning_effort={effort}"));
     }
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     if let Some(prompt) = prompt {
         args.push(prompt.into());
     }
     LaunchSpec {
         bin: resolve_codex_bin(),
         args,
-        cwd: extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
-        env: vec![("CODEX_HOME".into(), codex_home.to_string_lossy().into_owned())],
+        cwd: extras
+            .spawn_cwd
+            .clone()
+            .unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
+        env: vec![(
+            "CODEX_HOME".into(),
+            codex_home.to_string_lossy().into_owned(),
+        )],
         prompt_delivered: prompt.is_some(),
         cleanup_dir: Some(overlay),
     }
 }
 
-pub fn prepare_claude_launch(claude_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_claude_launch(
+    claude_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-claude-").expect("temp");
     if !extras.native_local {
         write_secret(overlay.join("CLAUDE.md"), claude_md).ok();
@@ -781,25 +843,41 @@ pub fn prepare_claude_launch(claude_md: &str, bridge: &Bridge, extras: &LaunchEx
             args.push(text.clone());
         }
     }
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("--model".into());
         args.push(model.into());
     }
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     if let Some(prompt) = prompt {
         args.push(prompt.into());
     }
     LaunchSpec {
         bin: resolve_claude_bin(),
         args,
-        cwd: extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
+        cwd: extras
+            .spawn_cwd
+            .clone()
+            .unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
         env: Vec::new(),
         prompt_delivered: prompt.is_some(),
         cleanup_dir: Some(overlay),
     }
 }
 
-pub fn prepare_opencode_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_opencode_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-opencode-").expect("temp");
     if !extras.native_local {
         write_secret(overlay.join("AGENTS.md"), host_context_md).ok();
@@ -824,13 +902,25 @@ pub fn prepare_opencode_launch(host_context_md: &str, bridge: &Bridge, extras: &
     );
     let cfg_path = overlay.join("opencode.json");
     write_secret(&cfg_path, &cfg).ok();
-    let project = extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned());
+    let project = extras
+        .spawn_cwd
+        .clone()
+        .unwrap_or_else(|| overlay.to_string_lossy().into_owned());
     let mut args = vec![project.clone()];
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("--model".into());
         args.push(model.into());
     }
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     let mut delivered = false;
     if extras.resume_sessions && prompt.is_none() {
         args.push("--continue".into());
@@ -846,13 +936,20 @@ pub fn prepare_opencode_launch(host_context_md: &str, bridge: &Bridge, extras: &
         bin: resolve_opencode_bin(),
         args,
         cwd: project,
-        env: vec![("OPENCODE_CONFIG".into(), cfg_path.to_string_lossy().into_owned())],
+        env: vec![(
+            "OPENCODE_CONFIG".into(),
+            cfg_path.to_string_lossy().into_owned(),
+        )],
         prompt_delivered: delivered,
         cleanup_dir: Some(overlay),
     }
 }
 
-pub fn prepare_kimi_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_kimi_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-kimi-").expect("temp");
     if !extras.native_local {
         write_secret(overlay.join("AGENTS.md"), host_context_md).ok();
@@ -868,14 +965,22 @@ pub fn prepare_kimi_launch(host_context_md: &str, bridge: &Bridge, extras: &Laun
     );
     write_secret(kimi_dir.join("mcp.json"), &mcp).ok();
     let mut args = Vec::new();
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("--model".into());
         args.push(model.into());
     }
     LaunchSpec {
         bin: resolve_kimi_bin(),
         args,
-        cwd: extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
+        cwd: extras
+            .spawn_cwd
+            .clone()
+            .unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
         env: Vec::new(),
         prompt_delivered: false,
         cleanup_dir: Some(overlay),
@@ -890,7 +995,10 @@ pub fn normalize_grok_effort(value: Option<&str>) -> Option<&str> {
 }
 
 pub fn resolve_grok_bin() -> String {
-    let home_bin = PathBuf::from(home_dir()).join(".grok").join("bin").join("grok");
+    let home_bin = PathBuf::from(home_dir())
+        .join(".grok")
+        .join("bin")
+        .join("grok");
     if home_bin.exists() {
         return home_bin.to_string_lossy().into_owned();
     }
@@ -904,7 +1012,11 @@ fn grok_mcp_toml(bridge: &Bridge) -> String {
     )
 }
 
-pub fn prepare_grok_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_grok_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-grok-").expect("temp");
     let native = extras.native_local;
     fs::create_dir_all(overlay.join(".grok")).ok();
@@ -933,7 +1045,12 @@ pub fn prepare_grok_launch(host_context_md: &str, bridge: &Bridge, extras: &Laun
     };
     write_secret(overlay.join(".claude").join("settings.json"), settings).ok();
     let mut args = vec!["--disable-web-search".into(), "--no-subagents".into()];
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("--model".into());
         args.push(model.into());
     }
@@ -941,14 +1058,21 @@ pub fn prepare_grok_launch(host_context_md: &str, bridge: &Bridge, extras: &Laun
         args.push("--effort".into());
         args.push(effort.into());
     }
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     if let Some(prompt) = prompt {
         args.push(prompt.into());
     }
     LaunchSpec {
         bin: resolve_grok_bin(),
         args,
-        cwd: extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
+        cwd: extras
+            .spawn_cwd
+            .clone()
+            .unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
         env,
         prompt_delivered: prompt.is_some(),
         cleanup_dir: Some(overlay),
@@ -966,7 +1090,10 @@ pub fn antigravity_effort(value: Option<&str>) -> Option<&'static str> {
 }
 
 pub fn resolve_antigravity_bin() -> String {
-    let home = PathBuf::from(home_dir()).join(".gemini").join("antigravity-cli").join("bin");
+    let home = PathBuf::from(home_dir())
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("bin");
     let agy = home.join("agy");
     if agy.exists() {
         return agy.to_string_lossy().into_owned();
@@ -978,7 +1105,11 @@ pub fn resolve_antigravity_bin() -> String {
     resolve_cached("agy", "agy")
 }
 
-pub fn prepare_antigravity_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_antigravity_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-antigravity-").expect("temp");
     if !extras.native_local {
         write_secret(overlay.join("AGENTS.md"), host_context_md).ok();
@@ -993,10 +1124,22 @@ pub fn prepare_antigravity_launch(host_context_md: &str, bridge: &Bridge, extras
     fs::create_dir_all(overlay.join(".antigravity")).ok();
     fs::create_dir_all(overlay.join(".gemini").join("antigravity-cli")).ok();
     write_secret(overlay.join(".antigravity").join("mcp.json"), &mcp).ok();
-    write_secret(overlay.join(".gemini").join("antigravity-cli").join("mcp.json"), &mcp).ok();
+    write_secret(
+        overlay
+            .join(".gemini")
+            .join("antigravity-cli")
+            .join("mcp.json"),
+        &mcp,
+    )
+    .ok();
     write_secret(overlay.join("mcp.json"), &mcp).ok();
     let mut args = Vec::new();
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("--model".into());
         args.push(model.into());
     }
@@ -1004,7 +1147,11 @@ pub fn prepare_antigravity_launch(host_context_md: &str, bridge: &Bridge, extras
         args.push("--effort".into());
         args.push(effort.into());
     }
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     let mut delivered = false;
     if let Some(prompt) = prompt {
         if prompt.chars().count() <= ANTIGRAVITY_PROMPT_ARG_LIMIT {
@@ -1015,7 +1162,10 @@ pub fn prepare_antigravity_launch(host_context_md: &str, bridge: &Bridge, extras
     LaunchSpec {
         bin: resolve_antigravity_bin(),
         args,
-        cwd: extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
+        cwd: extras
+            .spawn_cwd
+            .clone()
+            .unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
         env: Vec::new(),
         prompt_delivered: delivered,
         cleanup_dir: Some(overlay),
@@ -1050,15 +1200,52 @@ pub struct MuseSettings {
     pub mcp_server_names: Vec<String>,
 }
 
-pub fn safe_muse_preferences(provider: Option<&str>, model: Option<&str>, reasoning: Option<&str>, theme: Option<&str>, color_depth: Option<&str>) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+pub fn safe_muse_preferences(
+    provider: Option<&str>,
+    model: Option<&str>,
+    reasoning: Option<&str>,
+    theme: Option<&str>,
+    color_depth: Option<&str>,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     let provider_norm = provider.unwrap_or("meta").trim().to_lowercase();
-    let model = if provider_norm == "meta" { model.map(|s| s.to_string()) } else { None };
-    let reasoning = if provider_norm == "meta" { reasoning.map(|s| s.to_string()) } else { None };
-    (model, reasoning, theme.map(|s| s.to_string()), color_depth.map(|s| s.to_string()))
+    let model = if provider_norm == "meta" {
+        model.map(|s| s.to_string())
+    } else {
+        None
+    };
+    let reasoning = if provider_norm == "meta" {
+        reasoning.map(|s| s.to_string())
+    } else {
+        None
+    };
+    (
+        model,
+        reasoning,
+        theme.map(|s| s.to_string()),
+        color_depth.map(|s| s.to_string()),
+    )
 }
 
-pub fn build_muse_settings(bridge: &Bridge, user_provider: Option<&str>, user_model: Option<&str>, user_reasoning: Option<&str>, theme: Option<&str>, color_depth: Option<&str>) -> MuseSettings {
-    let (model, reasoning, theme, _color) = safe_muse_preferences(user_provider, user_model, user_reasoning, theme, color_depth);
+pub fn build_muse_settings(
+    bridge: &Bridge,
+    user_provider: Option<&str>,
+    user_model: Option<&str>,
+    user_reasoning: Option<&str>,
+    theme: Option<&str>,
+    color_depth: Option<&str>,
+) -> MuseSettings {
+    let (model, reasoning, theme, _color) = safe_muse_preferences(
+        user_provider,
+        user_model,
+        user_reasoning,
+        theme,
+        color_depth,
+    );
     MuseSettings {
         schema_version: 1,
         provider: "meta".into(),
@@ -1086,7 +1273,12 @@ fn normalize_muse_model(value: &str) -> String {
 }
 
 fn configured_muse_model(extras: &LaunchExtras) -> Option<String> {
-    if let Some(explicit) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(explicit) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         return Some(normalize_muse_model(explicit));
     }
     let prefs = extras.preferences.as_ref()?;
@@ -1102,7 +1294,11 @@ fn configured_muse_model(extras: &LaunchExtras) -> Option<String> {
     }
 }
 
-pub fn prepare_muse_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_muse_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-muse-").expect("temp");
     let config_home = overlay.join("config");
     let muse_dir = config_home.join("muse");
@@ -1113,7 +1309,11 @@ pub fn prepare_muse_launch(host_context_md: &str, bridge: &Bridge, extras: &Laun
         write_secret(overlay.join("AGENTS.md"), host_context_md).ok();
     }
     let settings = build_muse_settings(bridge, Some("meta"), None, None, None, None);
-    let model_line = settings.model.as_ref().map(|m| format!(",\n  \"model\": {}", json_quote(m))).unwrap_or_default();
+    let model_line = settings
+        .model
+        .as_ref()
+        .map(|m| format!(",\n  \"model\": {}", json_quote(m)))
+        .unwrap_or_default();
     let json = format!(
         "{{\n  \"schema_version\": 1{model_line},\n  \"tui\": {{\n    \"color_depth\": \"truecolor\"\n  }},\n  \"provider\": \"meta\",\n  \"mcp_servers\": {{\n    \"devterm\": {{\n      \"transport\": \"streamable_http\",\n      \"url\": {},\n      \"headers\": {{\n        \"Authorization\": {}\n      }},\n      \"enabled\": true,\n      \"mode\": \"required\"\n    }}\n  }}\n}}",
         json_quote(&bridge.url),
@@ -1133,7 +1333,11 @@ pub fn prepare_muse_launch(host_context_md: &str, bridge: &Bridge, extras: &Laun
         args.push("--reasoning-effort".into());
         args.push(effort.into());
     }
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     let mut delivered = false;
     if let Some(prompt) = prompt {
         if prompt.chars().count() <= MUSE_PROMPT_ARG_LIMIT {
@@ -1144,10 +1348,16 @@ pub fn prepare_muse_launch(host_context_md: &str, bridge: &Bridge, extras: &Laun
     LaunchSpec {
         bin: resolve_muse_bin(),
         args,
-        cwd: extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
+        cwd: extras
+            .spawn_cwd
+            .clone()
+            .unwrap_or_else(|| overlay.to_string_lossy().into_owned()),
         env: vec![
             ("MUSE_NO_AUTO_UPDATE".into(), "1".into()),
-            ("XDG_CONFIG_HOME".into(), config_home.to_string_lossy().into_owned()),
+            (
+                "XDG_CONFIG_HOME".into(),
+                config_home.to_string_lossy().into_owned(),
+            ),
         ],
         prompt_delivered: delivered,
         cleanup_dir: Some(overlay),
@@ -1184,7 +1394,11 @@ pub fn build_cursor_mcp_config(bridge: &Bridge) -> CursorMcp {
     }
 }
 
-pub fn prepare_cursor_launch(host_context_md: &str, bridge: &Bridge, extras: &LaunchExtras) -> LaunchSpec {
+pub fn prepare_cursor_launch(
+    host_context_md: &str,
+    bridge: &Bridge,
+    extras: &LaunchExtras,
+) -> LaunchSpec {
     let overlay = mktemp("devterm-cursor-").expect("temp");
     let cursor_home = overlay.join("home");
     let cursor_dir = cursor_home.join(".cursor");
@@ -1217,14 +1431,26 @@ pub fn prepare_cursor_launch(host_context_md: &str, bridge: &Bridge, extras: &La
         "--sandbox".into(),
         "disabled".into(),
     ];
-    if let Some(model) = extras.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(model) = extras
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         args.push("--model".into());
         args.push(model.into());
     }
-    let workspace = extras.spawn_cwd.clone().unwrap_or_else(|| overlay.to_string_lossy().into_owned());
+    let workspace = extras
+        .spawn_cwd
+        .clone()
+        .unwrap_or_else(|| overlay.to_string_lossy().into_owned());
     args.push("--workspace".into());
     args.push(workspace.clone());
-    let prompt = extras.initial_prompt.as_deref().map(rtrim_ws).filter(|s| !s.is_empty());
+    let prompt = extras
+        .initial_prompt
+        .as_deref()
+        .map(rtrim_ws)
+        .filter(|s| !s.is_empty());
     let mut delivered = false;
     if let Some(prompt) = prompt {
         if prompt.chars().count() <= CURSOR_PROMPT_ARG_LIMIT {
@@ -1255,7 +1481,11 @@ pub struct HostExecResult {
 
 pub fn local_exec(command: &str, timeout_ms: u64, cwd: Option<&Path>) -> HostExecResult {
     let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(command).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.arg("-c")
+        .arg(command)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
     }
@@ -1371,17 +1601,20 @@ fn sha256_hex(data: &[u8]) -> String {
 
 fn sha256(data: &[u8]) -> [u8; 32] {
     const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+        0xc67178f2,
     ];
     let mut h: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+        0x5be0cd19,
     ];
     let bit_len = (data.len() as u64) * 8;
     let mut msg = data.to_vec();
@@ -1398,13 +1631,20 @@ fn sha256(data: &[u8]) -> [u8; 32] {
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
             let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
         }
         let mut a = h;
         for i in 0..64 {
             let s1 = a[4].rotate_right(6) ^ a[4].rotate_right(11) ^ a[4].rotate_right(25);
             let ch = (a[4] & a[5]) ^ (!a[4] & a[6]);
-            let t1 = a[7].wrapping_add(s1).wrapping_add(ch).wrapping_add(K[i]).wrapping_add(w[i]);
+            let t1 = a[7]
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(K[i])
+                .wrapping_add(w[i]);
             let s0 = a[0].rotate_right(2) ^ a[0].rotate_right(13) ^ a[0].rotate_right(22);
             let maj = (a[0] & a[1]) ^ (a[0] & a[2]) ^ (a[1] & a[2]);
             let t2 = s0.wrapping_add(maj);
@@ -1451,14 +1691,18 @@ mod tests {
     #[test]
     fn bundled_cli_path_shape_and_node_bin_exists() {
         let cli = resolve_bundled_agent_cli().unwrap();
-        assert!(cli.replace('\\', "/").ends_with("@earendil-works/pi-coding-agent/dist/cli.js"));
+        assert!(cli
+            .replace('\\', "/")
+            .ends_with("@earendil-works/pi-coding-agent/dist/cli.js"));
         let bin = resolve_bundled_node_bin().unwrap();
         assert!(Path::new(&bin).exists());
     }
 
     #[test]
     fn disables_ambient_discovery_and_delivers_prompt() {
-        let spec = prepare_builtin_agent_launch("host briefing", &bridge(), &LaunchExtras::default()).unwrap();
+        let spec =
+            prepare_builtin_agent_launch("host briefing", &bridge(), &LaunchExtras::default())
+                .unwrap();
         assert_eq!(spec.args[0], resolve_bundled_agent_cli().unwrap());
         assert_eq!(spec.bin, resolve_bundled_node_bin().unwrap());
         for flag in [
@@ -1485,14 +1729,18 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(spec.args.last().map(String::as_str), Some("list files on this host"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("list files on this host")
+        );
         assert!(spec.prompt_delivered);
         spec.cleanup();
     }
 
     #[test]
     fn pins_provider_and_resume_and_native_local() {
-        let dir = std::env::temp_dir().join(format!("devterm-agent-sessions-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devterm-agent-sessions-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         let skill_path = dir.join("SKILL.md");
         fs::write(&skill_path, "# Safe test skill\n").unwrap();
@@ -1536,7 +1784,10 @@ mod tests {
         let m = spec.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(spec.args[m + 1], "anthropic/claude-sonnet-4.6");
         let m = spec.args.iter().position(|a| a == "--models").unwrap();
-        assert_eq!(spec.args[m + 1], "anthropic/claude-sonnet-4.6,openai/gpt-5,google/gemini-2.5-pro");
+        assert_eq!(
+            spec.args[m + 1],
+            "anthropic/claude-sonnet-4.6,openai/gpt-5,google/gemini-2.5-pro"
+        );
         let s = spec.args.iter().position(|a| a == "--skill").unwrap();
         assert_eq!(spec.args[s + 1], skill_path.to_string_lossy());
         assert_eq!(
@@ -1593,7 +1844,11 @@ mod tests {
         assert!(!mismatched.args.iter().any(|a| a == "--provider"));
         let m = mismatched.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(mismatched.args[m + 1], "openai/gpt-5");
-        let p = delegated.args.iter().position(|a| a == "--provider").unwrap();
+        let p = delegated
+            .args
+            .iter()
+            .position(|a| a == "--provider")
+            .unwrap();
         assert_eq!(delegated.args[p + 1], "anthropic");
         let m = delegated.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(delegated.args[m + 1], "claude-opus-4.6");
@@ -1628,7 +1883,10 @@ mod tests {
             ),
             "remote-root-192-168-1-50-2222"
         );
-        assert_eq!(derive_agent_session_id("session-12345-abc", None), "session-12345-abc");
+        assert_eq!(
+            derive_agent_session_id("session-12345-abc", None),
+            "session-12345-abc"
+        );
         assert_eq!(derive_local_agent_session_id(None), "local");
         assert_eq!(derive_local_agent_session_id(Some("")), "local");
         let a = derive_local_agent_session_id(Some("D:\\projects\\foo"));
@@ -1644,7 +1902,10 @@ mod tests {
         assert!(PI_EXTENSION_SOURCE.contains("Never the OS browser"));
         let dir = std::env::temp_dir().join(format!("devterm-cwd-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        assert_eq!(resolve_local_spawn_cwd(Some(&dir.to_string_lossy())), dir.to_string_lossy());
+        assert_eq!(
+            resolve_local_spawn_cwd(Some(&dir.to_string_lossy())),
+            dir.to_string_lossy()
+        );
         assert_eq!(
             resolve_local_spawn_cwd(Some(&dir.join("missing-subdir").to_string_lossy())),
             home_dir()
@@ -1652,7 +1913,8 @@ mod tests {
         assert_eq!(resolve_local_spawn_cwd(None), home_dir());
         let _ = fs::remove_dir_all(&dir);
 
-        let project = std::env::temp_dir().join(format!("devterm-local-project-{}", std::process::id()));
+        let project =
+            std::env::temp_dir().join(format!("devterm-local-project-{}", std::process::id()));
         fs::create_dir_all(&project).unwrap();
         let spec = prepare_builtin_agent_launch(
             "remote briefing must not be planted",
@@ -1670,28 +1932,50 @@ mod tests {
         assert!(!spec.args.iter().any(|a| a == "--no-builtin-tools"));
         assert!(spec.args.iter().any(|a| a == "--approve"));
         assert!(spec.args.iter().any(|a| a == "--append-system-prompt"));
-        let i = spec.args.iter().position(|a| a == "--append-system-prompt").unwrap();
+        let i = spec
+            .args
+            .iter()
+            .position(|a| a == "--append-system-prompt")
+            .unwrap();
         assert!(Path::new(&spec.args[i + 1]).exists());
         assert!(!project.join("AGENTS.md").exists());
         assert!(spec.args.iter().any(|a| a == "-e"));
         assert_eq!(spec.env_get("DEVTERM_BRIDGE_TOKEN"), Some("test-token"));
         assert!(spec.env_get("DEVTERM_MCP_DIR").is_some());
-        assert_ne!(spec.env_get("DEVTERM_MCP_DIR"), Some(project.to_string_lossy().as_ref()));
+        assert_ne!(
+            spec.env_get("DEVTERM_MCP_DIR"),
+            Some(project.to_string_lossy().as_ref())
+        );
         spec.cleanup();
         let _ = fs::remove_dir_all(&project);
     }
 
     #[test]
     fn briefings_match_context_tests() {
-        let local = HostContext { kind: "local", os: "windows", hostname: "workstation", detail: "Windows" };
-        let remote = HostContext { kind: "remote", os: "linux", hostname: "fleet-01", detail: "Ubuntu" };
+        let local = HostContext {
+            kind: "local",
+            os: "windows",
+            hostname: "workstation",
+            detail: "Windows",
+        };
+        let remote = HostContext {
+            kind: "remote",
+            os: "linux",
+            hostname: "fleet-01",
+            detail: "Ubuntu",
+        };
         let md = build_agents_md(&remote, false, Some("/home/op"));
         assert!(md.contains("mcp__devterm__run_command"));
         assert!(md.contains("Built-in tools are disabled"));
         assert!(md.contains("browser_list"));
         assert!(!md.contains("Windows host"));
         let md = build_agents_md(
-            &HostContext { kind: "remote", os: "windows", hostname: "winbox", detail: "Windows Server" },
+            &HostContext {
+                kind: "remote",
+                os: "windows",
+                hostname: "winbox",
+                detail: "Windows Server",
+            },
             false,
             Some("C:\\Users\\Administrator"),
         );
@@ -1736,13 +2020,23 @@ mod tests {
         assert!(!md.contains("mcp__devterm__browser_open"));
         let md = build_local_native_md(
             &local,
-            &LocalNativeOpts { cwd: None, browser_tools: Some(false), agent_handoff: None, tool_prefix: None },
+            &LocalNativeOpts {
+                cwd: None,
+                browser_tools: Some(false),
+                agent_handoff: None,
+                tool_prefix: None,
+            },
         );
         assert!(md.to_lowercase().contains("browser tools are disabled"));
         assert!(!md.contains("browser_open"));
         let md = build_local_native_md(
             &local,
-            &LocalNativeOpts { cwd: None, browser_tools: None, agent_handoff: Some(false), tool_prefix: None },
+            &LocalNativeOpts {
+                cwd: None,
+                browser_tools: None,
+                agent_handoff: Some(false),
+                tool_prefix: None,
+            },
         );
         assert!(md.to_lowercase().contains("handoff tools are disabled"));
         assert!(!md.contains("agent_delegate"));
@@ -1758,7 +2052,8 @@ mod tests {
         assert!(is_bin_path("/usr/local/bin/opencode"));
         assert!(is_bin_path("C:\\tools\\opencode.cmd"));
         assert!(is_bin_path("\\\\share\\tools\\agy.exe"));
-        let (model, warnings) = normalize_handoff_model("opencode", Some("anthropic/claude-sonnet-4"));
+        let (model, warnings) =
+            normalize_handoff_model("opencode", Some("anthropic/claude-sonnet-4"));
         assert_eq!(model.as_deref(), Some("anthropic/claude-sonnet-4"));
         assert!(warnings.is_empty());
         let (model, warnings) = normalize_handoff_model("opencode", None);
@@ -1768,8 +2063,20 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("muse spark 1.3 free"));
         assert!(warnings[0].contains("provider/model"));
-        assert!(normalize_handoff_model("opencode", Some("sonnet")).0.is_none());
-        for kind in ["kimi", "antigravity", "muse", "cursor", "claude", "codex", "grok", "pi", "devterm"] {
+        assert!(normalize_handoff_model("opencode", Some("sonnet"))
+            .0
+            .is_none());
+        for kind in [
+            "kimi",
+            "antigravity",
+            "muse",
+            "cursor",
+            "claude",
+            "codex",
+            "grok",
+            "pi",
+            "devterm",
+        ] {
             let (model, warnings) = normalize_handoff_model(kind, Some("muse spark 1.3 free"));
             assert_eq!(model.as_deref(), Some("muse spark 1.3 free"));
             assert!(warnings.is_empty());
@@ -1787,13 +2094,20 @@ mod tests {
         assert!(!resolve_muse_bin().is_empty());
         let cursor = resolve_cursor_bin();
         assert!(!cursor.is_empty());
-        assert!(cursor.to_lowercase().contains("cursor-agent") || cursor.to_lowercase().contains("agent"));
+        assert!(
+            cursor.to_lowercase().contains("cursor-agent")
+                || cursor.to_lowercase().contains("agent")
+        );
     }
 
     #[test]
     fn claude_codex_opencode_kimi_grok() {
-        let b = Bridge { token: "tok".into(), ..bridge() };
-        let project = std::env::temp_dir().join(format!("devterm-claude-proj-{}", std::process::id()));
+        let b = Bridge {
+            token: "tok".into(),
+            ..bridge()
+        };
+        let project =
+            std::env::temp_dir().join(format!("devterm-claude-proj-{}", std::process::id()));
         fs::create_dir_all(&project).unwrap();
         let spec = prepare_claude_launch(
             "remote CLAUDE.md",
@@ -1814,12 +2128,16 @@ mod tests {
         assert!(spec.args.iter().any(|a| a == "--mcp-config"));
         let i = spec.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(spec.args[i + 1], "claude-sonnet");
-        assert_eq!(spec.args.last().map(String::as_str), Some("implement the plan"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("implement the plan")
+        );
         assert!(spec.prompt_delivered);
         spec.cleanup();
         let _ = fs::remove_dir_all(&project);
 
-        let project = std::env::temp_dir().join(format!("devterm-codex-proj-{}", std::process::id()));
+        let project =
+            std::env::temp_dir().join(format!("devterm-codex-proj-{}", std::process::id()));
         fs::create_dir_all(&project).unwrap();
         let spec = prepare_codex_launch(
             "remote AGENTS.md",
@@ -1832,7 +2150,10 @@ mod tests {
         );
         assert_eq!(spec.cwd, project.to_string_lossy());
         let i = spec.args.iter().position(|a| a == "--sandbox").unwrap();
-        assert_eq!(&spec.args[i..i + 2], ["--sandbox".to_string(), "workspace-write".into()]);
+        assert_eq!(
+            &spec.args[i..i + 2],
+            ["--sandbox".to_string(), "workspace-write".into()]
+        );
         assert!(spec.env_get("CODEX_HOME").unwrap().contains("codex-home"));
         spec.cleanup();
         let spec = prepare_codex_launch(
@@ -1851,7 +2172,10 @@ mod tests {
         assert_eq!(spec.args[i + 1], "luna");
         let i = spec.args.iter().position(|a| a == "-c").unwrap();
         assert_eq!(spec.args[i + 1], "model_reasoning_effort=xhigh");
-        assert_eq!(spec.args.last().map(String::as_str), Some("implement the plan"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("implement the plan")
+        );
         assert!(spec.prompt_delivered);
         spec.cleanup();
         assert_eq!(codex_reasoning_effort(Some("unsupported")), None);
@@ -1865,8 +2189,13 @@ mod tests {
         assert!(toml.contains("[mcp_servers.devterm]"));
         assert!(toml.contains("Bearer tok"));
         assert!(toml.contains("http://127.0.0.1:12345/mcp"));
-        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md")).unwrap().contains("remote briefing"));
-        assert_eq!(&spec.args[..2], ["--sandbox".to_string(), "read-only".into()]);
+        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md"))
+            .unwrap()
+            .contains("remote briefing"));
+        assert_eq!(
+            &spec.args[..2],
+            ["--sandbox".to_string(), "read-only".into()]
+        );
         spec.cleanup();
         let spec = prepare_codex_launch(
             "must not be planted",
@@ -1878,7 +2207,9 @@ mod tests {
             },
         );
         assert!(!project.join("AGENTS.md").exists());
-        let toml = fs::read_to_string(Path::new(spec.env_get("CODEX_HOME").unwrap()).join("config.toml")).unwrap();
+        let toml =
+            fs::read_to_string(Path::new(spec.env_get("CODEX_HOME").unwrap()).join("config.toml"))
+                .unwrap();
         assert!(toml.contains("sandbox_mode = \"workspace-write\""));
         assert!(toml.contains("shell_tool = true"));
         spec.cleanup();
@@ -1903,7 +2234,10 @@ mod tests {
                 "model_reasoning_effort=xhigh".into()
             ]
         );
-        assert_eq!(spec.args.last().map(String::as_str), Some("implement the plan"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("implement the plan")
+        );
         spec.cleanup();
         let _ = fs::remove_dir_all(&project);
 
@@ -1969,7 +2303,9 @@ mod tests {
         for tool in ["bash", "read", "write", "edit", "glob", "grep", "question"] {
             assert!(cfg.contains(&format!("\"{tool}\": false")), "{tool}");
         }
-        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md")).unwrap().contains("host briefing"));
+        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md"))
+            .unwrap()
+            .contains("host briefing"));
         let cwd = spec.cwd.clone();
         spec.cleanup();
         assert!(!Path::new(&cwd).exists());
@@ -2015,12 +2351,16 @@ mod tests {
 
         let spec = prepare_grok_launch("remote briefing", &b, &LaunchExtras::default());
         assert!(spec.env_get("GROK_HOME").is_none());
-        let toml = fs::read_to_string(Path::new(&spec.cwd).join(".grok").join("config.toml")).unwrap();
+        let toml =
+            fs::read_to_string(Path::new(&spec.cwd).join(".grok").join("config.toml")).unwrap();
         assert!(toml.contains("mcp_servers.devterm"));
         assert!(toml.contains("Bearer tok"));
-        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md")).unwrap().contains("remote briefing"));
+        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md"))
+            .unwrap()
+            .contains("remote briefing"));
         spec.cleanup();
-        let project = std::env::temp_dir().join(format!("devterm-grok-proj-{}", std::process::id()));
+        let project =
+            std::env::temp_dir().join(format!("devterm-grok-proj-{}", std::process::id()));
         fs::create_dir_all(&project).unwrap();
         let spec = prepare_grok_launch(
             "remote briefing must not be planted",
@@ -2038,7 +2378,8 @@ mod tests {
         let toml = fs::read_to_string(Path::new(home).join("config.toml")).unwrap();
         assert!(toml.contains("mcp_servers.devterm"));
         assert!(toml.contains("http://127.0.0.1:12345/mcp"));
-        let rule = fs::read_to_string(Path::new(home).join("rules").join("devterm-local.md")).unwrap();
+        let rule =
+            fs::read_to_string(Path::new(home).join("rules").join("devterm-local.md")).unwrap();
         assert!(rule.contains("devterm__browser_open"));
         spec.cleanup();
         let valid = prepare_grok_launch(
@@ -2083,9 +2424,14 @@ mod tests {
     fn antigravity_muse_cursor() {
         let spec = prepare_antigravity_launch("host briefing", &bridge(), &LaunchExtras::default());
         assert!(Path::new(&spec.cwd).join("AGENTS.md").exists());
-        assert!(Path::new(&spec.cwd).join(".antigravity").join("mcp.json").exists());
+        assert!(Path::new(&spec.cwd)
+            .join(".antigravity")
+            .join("mcp.json")
+            .exists());
         assert!(Path::new(&spec.cwd).join("mcp.json").exists());
-        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md")).unwrap().contains("host briefing"));
+        assert!(fs::read_to_string(Path::new(&spec.cwd).join("AGENTS.md"))
+            .unwrap()
+            .contains("host briefing"));
         let mcp = fs::read_to_string(Path::new(&spec.cwd).join("mcp.json")).unwrap();
         assert!(mcp.contains("http://127.0.0.1:12345/mcp"));
         assert!(mcp.contains("Bearer test-token"));
@@ -2112,14 +2458,20 @@ mod tests {
         assert_eq!(spec.args[i + 1], "Gemini 3.5 Flash (Low)");
         let i = spec.args.iter().position(|a| a == "--effort").unwrap();
         assert_eq!(spec.args[i + 1], "high");
-        assert_eq!(spec.args.last().map(String::as_str), Some("implement the plan"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("implement the plan")
+        );
         assert!(spec.prompt_delivered);
         spec.cleanup();
         let huge = format!("task {}", "x".repeat(ANTIGRAVITY_PROMPT_ARG_LIMIT));
         let spec = prepare_antigravity_launch(
             "host briefing",
             &bridge(),
-            &LaunchExtras { initial_prompt: Some(huge.clone()), ..LaunchExtras::default() },
+            &LaunchExtras {
+                initial_prompt: Some(huge.clone()),
+                ..LaunchExtras::default()
+            },
         );
         assert!(!spec.args.iter().any(|a| a == &huge));
         assert!(!spec.prompt_delivered);
@@ -2128,14 +2480,25 @@ mod tests {
         let spec = prepare_muse_launch("host briefing", &bridge(), &LaunchExtras::default());
         let config_home = spec.env_get("XDG_CONFIG_HOME").unwrap().to_string();
         assert!(Path::new(&spec.cwd).join("AGENTS.md").exists());
-        assert!(Path::new(&config_home).join("muse").join("settings.json").exists());
-        let settings = fs::read_to_string(Path::new(&config_home).join("muse").join("settings.json")).unwrap();
+        assert!(Path::new(&config_home)
+            .join("muse")
+            .join("settings.json")
+            .exists());
+        let settings =
+            fs::read_to_string(Path::new(&config_home).join("muse").join("settings.json")).unwrap();
         assert!(settings.contains("\"schema_version\": 1"));
         assert!(settings.contains("streamable_http"));
         assert!(settings.contains("http://127.0.0.1:12345/mcp"));
         assert!(settings.contains("Bearer test-token"));
         assert!(settings.contains("\"mode\": \"required\""));
-        assert_eq!(&spec.args[..3], ["--yolo".to_string(), "--disable-shell".into(), "--disable-write".into()]);
+        assert_eq!(
+            &spec.args[..3],
+            [
+                "--yolo".to_string(),
+                "--disable-shell".into(),
+                "--disable-write".into()
+            ]
+        );
         assert!(!spec.prompt_delivered);
         spec.cleanup();
         assert!(!Path::new(&config_home).exists());
@@ -2156,11 +2519,25 @@ mod tests {
         assert!(settings.permissions.is_none());
         assert!(settings.hooks.is_none());
         assert_eq!(settings.mcp_server_names, vec!["devterm"]);
-        let echo = build_muse_settings(&bridge(), Some("echo"), Some("echo-model"), None, Some("one-dark-pro"), None);
+        let echo = build_muse_settings(
+            &bridge(),
+            Some("echo"),
+            Some("echo-model"),
+            None,
+            Some("one-dark-pro"),
+            None,
+        );
         assert_eq!(echo.provider, "meta");
         assert!(echo.model.is_none());
         assert_eq!(echo.tui_color_depth, "truecolor");
-        let pinned = build_muse_settings(&bridge(), None, None, None, Some("one-dark-pro"), Some("16"));
+        let pinned = build_muse_settings(
+            &bridge(),
+            None,
+            None,
+            None,
+            Some("one-dark-pro"),
+            Some("16"),
+        );
         assert_eq!(pinned.tui_color_depth, "truecolor");
         let bare = build_muse_settings(&bridge(), None, None, None, None, None);
         assert_eq!(bare.tui_color_depth, "truecolor");
@@ -2180,9 +2557,16 @@ mod tests {
         );
         let i = spec.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(spec.args[i + 1], "muse-spark-1.3");
-        let i = spec.args.iter().position(|a| a == "--reasoning-effort").unwrap();
+        let i = spec
+            .args
+            .iter()
+            .position(|a| a == "--reasoning-effort")
+            .unwrap();
         assert_eq!(spec.args[i + 1], "max");
-        assert_eq!(spec.args.last().map(String::as_str), Some("implement the plan"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("implement the plan")
+        );
         assert!(spec.prompt_delivered);
         spec.cleanup();
         let spec = prepare_muse_launch(
@@ -2203,7 +2587,9 @@ mod tests {
         let i = spec.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(spec.args[i + 1], "muse-spark-1.3");
         let settings = fs::read_to_string(
-            Path::new(spec.env_get("XDG_CONFIG_HOME").unwrap()).join("muse").join("settings.json"),
+            Path::new(spec.env_get("XDG_CONFIG_HOME").unwrap())
+                .join("muse")
+                .join("settings.json"),
         )
         .unwrap();
         assert!(settings.contains("Bearer test-token"));
@@ -2212,7 +2598,10 @@ mod tests {
         let spec = prepare_muse_launch(
             "host briefing",
             &bridge(),
-            &LaunchExtras { model: Some("meta/muse-spark-1.3".into()), ..LaunchExtras::default() },
+            &LaunchExtras {
+                model: Some("meta/muse-spark-1.3".into()),
+                ..LaunchExtras::default()
+            },
         );
         let i = spec.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(spec.args[i + 1], "muse-spark-1.3");
@@ -2221,7 +2610,10 @@ mod tests {
         let spec = prepare_muse_launch(
             "host briefing",
             &bridge(),
-            &LaunchExtras { initial_prompt: Some(huge.clone()), ..LaunchExtras::default() },
+            &LaunchExtras {
+                initial_prompt: Some(huge.clone()),
+                ..LaunchExtras::default()
+            },
         );
         assert!(!spec.args.iter().any(|a| a == &huge));
         assert!(!spec.prompt_delivered);
@@ -2238,7 +2630,10 @@ mod tests {
         let config_home = spec.env_get("XDG_CONFIG_HOME").unwrap().to_string();
         assert_eq!(spec.cwd, "operator-folder");
         assert_eq!(spec.args, vec!["--yolo".to_string()]);
-        assert!(Path::new(&config_home).join("muse").join("settings.json").exists());
+        assert!(Path::new(&config_home)
+            .join("muse")
+            .join("settings.json")
+            .exists());
         spec.cleanup();
         assert!(!Path::new(&config_home).exists());
 
@@ -2257,7 +2652,12 @@ mod tests {
         assert!(mcp.contains("Bearer test-token"));
         assert_eq!(
             &spec.args[..4],
-            ["--yolo".to_string(), "--approve-mcps".into(), "--sandbox".into(), "disabled".into()]
+            [
+                "--yolo".to_string(),
+                "--approve-mcps".into(),
+                "--sandbox".into(),
+                "disabled".into()
+            ]
         );
         let i = spec.args.iter().position(|a| a == "--workspace").unwrap();
         assert_eq!(spec.args[i + 1], spec.cwd);
@@ -2282,20 +2682,32 @@ mod tests {
         assert!(!Path::new("operator-folder").join("AGENTS.md").exists());
         let home = spec.env_get("HOME").unwrap();
         assert!(Path::new(home).join(".cursor").join("mcp.json").exists());
-        let rule = fs::read_to_string(Path::new(home).join(".cursor").join("rules").join("devterm-local.mdc")).unwrap();
+        let rule = fs::read_to_string(
+            Path::new(home)
+                .join(".cursor")
+                .join("rules")
+                .join("devterm-local.mdc"),
+        )
+        .unwrap();
         assert_eq!(rule, "Use mcp__devterm__browser_open.");
         let i = spec.args.iter().position(|a| a == "--model").unwrap();
         assert_eq!(spec.args[i + 1], "composer-2");
         let i = spec.args.iter().position(|a| a == "--workspace").unwrap();
         assert_eq!(spec.args[i + 1], "operator-folder");
-        assert_eq!(spec.args.last().map(String::as_str), Some("implement the plan"));
+        assert_eq!(
+            spec.args.last().map(String::as_str),
+            Some("implement the plan")
+        );
         assert!(spec.prompt_delivered);
         spec.cleanup();
         let huge = format!("task {}", "x".repeat(CURSOR_PROMPT_ARG_LIMIT));
         let spec = prepare_cursor_launch(
             "host briefing",
             &bridge(),
-            &LaunchExtras { initial_prompt: Some(huge.clone()), ..LaunchExtras::default() },
+            &LaunchExtras {
+                initial_prompt: Some(huge.clone()),
+                ..LaunchExtras::default()
+            },
         );
         assert!(!spec.args.iter().any(|a| a == &huge));
         assert!(!spec.prompt_delivered);
@@ -2313,7 +2725,10 @@ mod tests {
         assert_eq!(norm(&res.stdout), norm(&dir.to_string_lossy()));
         let res = local_exec("pwd", 10_000, None);
         assert_eq!(res.code, 0);
-        assert_eq!(norm(&res.stdout), norm(&std::env::current_dir().unwrap().to_string_lossy()));
+        assert_eq!(
+            norm(&res.stdout),
+            norm(&std::env::current_dir().unwrap().to_string_lossy())
+        );
         assert_eq!(resolve_posix(Some("/home/op/"), "src"), "/home/op/src");
         assert_eq!(resolve_posix(Some("/home/op"), "/abs"), "/abs");
         let _ = fs::remove_dir_all(&dir);

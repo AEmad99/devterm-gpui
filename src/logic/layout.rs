@@ -304,7 +304,8 @@ impl LayoutStore {
                 }
             }
         }
-        let live: std::collections::HashSet<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+        let live: std::collections::HashSet<&str> =
+            sessions.iter().map(|s| s.id.as_str()).collect();
         let focused_id = self
             .focused_id
             .as_ref()
@@ -376,7 +377,10 @@ impl LayoutStore {
             let Some(root) = &group.root else {
                 continue;
             };
-            if !all_leaves(root).iter().any(|l| l.tabs.iter().any(|t| t == old_id)) {
+            if !all_leaves(root)
+                .iter()
+                .any(|l| l.tabs.iter().any(|t| t == old_id))
+            {
                 continue;
             }
             changed = true;
@@ -765,7 +769,13 @@ impl LayoutStore {
     }
 
     /// Restore a group from a snapshot. Grids and ordinary groups share this path.
-    pub fn restore_group(&mut self, id: &str, name: &str, snap: Option<&LayoutSnapshot>, activate: bool) {
+    pub fn restore_group(
+        &mut self,
+        id: &str,
+        name: &str,
+        snap: Option<&LayoutSnapshot>,
+        activate: bool,
+    ) {
         let built = build_snapshot(snap, &mut self.ids);
         if let Some(group) = self.groups.iter_mut().find(|g| g.id == id) {
             group.name = name.to_string();
@@ -843,10 +853,15 @@ impl LayoutStore {
     }
 
     fn active_index(&self) -> Option<usize> {
-        self.groups.iter().position(|g| g.id == self.active_group_id)
+        self.groups
+            .iter()
+            .position(|g| g.id == self.active_group_id)
     }
 
-    fn edit_active(&mut self, f: impl FnOnce(LayoutNode, Option<String>, &mut IdGen) -> Option<(LayoutNode, Option<String>)>) {
+    fn edit_active(
+        &mut self,
+        f: impl FnOnce(LayoutNode, Option<String>, &mut IdGen) -> Option<(LayoutNode, Option<String>)>,
+    ) {
         let Some(idx) = self.active_index() else {
             return;
         };
@@ -859,7 +874,6 @@ impl LayoutStore {
             self.groups[idx].active_leaf = active_leaf;
         }
     }
-
 }
 
 fn mk_leaf(ids: &mut IdGen, tabs: Vec<String>) -> LeafNode {
@@ -1028,7 +1042,12 @@ fn detach_tab(root: LayoutNode, sid: &str) -> Option<LayoutNode> {
     let Some(owner) = leaf_of(&root, sid) else {
         return Some(root);
     };
-    let tabs: Vec<String> = owner.tabs.iter().filter(|t| t.as_str() != sid).cloned().collect();
+    let tabs: Vec<String> = owner
+        .tabs
+        .iter()
+        .filter(|t| t.as_str() != sid)
+        .cloned()
+        .collect();
     let active = if owner
         .active
         .as_ref()
@@ -1214,23 +1233,29 @@ fn build_snapshot(snap: Option<&LayoutSnapshot>, gen: &mut IdGen) -> RootState {
         };
     };
     let mut first_leaf_id = None;
-    fn build(n: &LayoutSnapshot, gen: &mut IdGen, first_leaf_id: &mut Option<String>) -> LayoutNode {
+    fn build(
+        n: &LayoutSnapshot,
+        gen: &mut IdGen,
+        first_leaf_id: &mut Option<String>,
+    ) -> LayoutNode {
         match n {
             LayoutSnapshot::Leaf { tabs, active } => {
                 let id = gen.fresh("leaf");
                 if first_leaf_id.is_none() {
                     *first_leaf_id = Some(id.clone());
                 }
-                let active = active
-                    .clone()
-                    .or_else(|| tabs.last().cloned());
+                let active = active.clone().or_else(|| tabs.last().cloned());
                 LayoutNode::Leaf(LeafNode {
                     id,
                     tabs: tabs.clone(),
                     active,
                 })
             }
-            LayoutSnapshot::Split { dir, sizes, children } => LayoutNode::Split(SplitNode {
+            LayoutSnapshot::Split {
+                dir,
+                sizes,
+                children,
+            } => LayoutNode::Split(SplitNode {
                 id: gen.fresh("split"),
                 dir: *dir,
                 sizes: sizes.clone(),
@@ -1521,7 +1546,11 @@ mod tests {
             vec![Group {
                 id: DEFAULT_GROUP.into(),
                 name: "Terminals".into(),
-                root: Some(leaf("leaf-pending", &["pending-a", "pending-b"], "pending-b")),
+                root: Some(leaf(
+                    "leaf-pending",
+                    &["pending-a", "pending-b"],
+                    "pending-b",
+                )),
                 active_leaf: Some("leaf-pending".into()),
             }],
             DEFAULT_GROUP,
@@ -1573,7 +1602,11 @@ mod tests {
         let right = root.children[1].as_leaf().unwrap();
         assert_eq!(
             left.tabs,
-            vec!["term-a".to_string(), "term-b".to_string(), "term-c".to_string()]
+            vec![
+                "term-a".to_string(),
+                "term-b".to_string(),
+                "term-c".to_string()
+            ]
         );
         assert_eq!(left.active.as_deref(), Some("term-b"));
         assert_eq!(right.tabs, vec!["browser-1".to_string()]);
@@ -1606,7 +1639,11 @@ mod tests {
         let terminal = root.children[0].as_leaf().unwrap();
         assert_eq!(
             terminal.tabs,
-            vec!["term-a".to_string(), "term-b".to_string(), "term-c".to_string()]
+            vec![
+                "term-a".to_string(),
+                "term-b".to_string(),
+                "term-c".to_string()
+            ]
         );
         assert_eq!(terminal.active.as_deref(), Some("term-b"));
         assert_eq!(store.groups[0].active_leaf.as_deref(), Some("leaf-1"));
@@ -1627,7 +1664,13 @@ mod tests {
             HashMap::new(),
         );
         store.split_right("a", "b");
-        let left_id = store.groups[0].root.as_ref().unwrap().as_split().unwrap().children[0]
+        let left_id = store.groups[0]
+            .root
+            .as_ref()
+            .unwrap()
+            .as_split()
+            .unwrap()
+            .children[0]
             .as_leaf()
             .unwrap()
             .id
@@ -1635,8 +1678,14 @@ mod tests {
         {
             let split = store.groups[0].root.as_ref().unwrap().as_split().unwrap();
             assert_eq!(split.dir, SplitDir::Row);
-            assert_eq!(split.children[0].as_leaf().unwrap().tabs, vec!["a".to_string()]);
-            assert_eq!(split.children[1].as_leaf().unwrap().tabs, vec!["b".to_string()]);
+            assert_eq!(
+                split.children[0].as_leaf().unwrap().tabs,
+                vec!["a".to_string()]
+            );
+            assert_eq!(
+                split.children[1].as_leaf().unwrap().tabs,
+                vec!["b".to_string()]
+            );
         }
         let geom = compute_layout(store.groups[0].root.as_ref());
         assert_eq!(geom.leaves.len(), 2);
@@ -1674,7 +1723,13 @@ mod tests {
             .sizes
             .clone();
         assert!((sizes[0] - 0.5).abs() < 1e-9);
-        let left_id = store.groups[0].root.as_ref().unwrap().as_split().unwrap().children[0]
+        let left_id = store.groups[0]
+            .root
+            .as_ref()
+            .unwrap()
+            .as_split()
+            .unwrap()
+            .children[0]
             .as_leaf()
             .unwrap()
             .id
@@ -1721,7 +1776,13 @@ mod tests {
         assert!(store.groups.iter().any(|g| g.id == DEFAULT_GROUP));
         assert!(store.groups.iter().all(|g| g.id != "other"));
         assert_eq!(
-            store.groups[0].root.as_ref().unwrap().as_leaf().unwrap().tabs,
+            store.groups[0]
+                .root
+                .as_ref()
+                .unwrap()
+                .as_leaf()
+                .unwrap()
+                .tabs,
             vec!["local-1".to_string()]
         );
         store.close_tab("local-1");

@@ -139,10 +139,8 @@ fn pick_status(index: char, worktree: char) -> GitFileStatus {
         return '?';
     }
     let xy = format!("{index}{worktree}");
-    if matches!(
-        xy.as_str(),
-        "UU" | "AA" | "DD" | "AU" | "UA" | "DU" | "UD"
-    ) || worktree == 'U'
+    if matches!(xy.as_str(), "UU" | "AA" | "DD" | "AU" | "UA" | "DU" | "UD")
+        || worktree == 'U'
         || index == 'U'
     {
         return 'U';
@@ -210,7 +208,10 @@ pub fn layout_graph(entries: &[GitLogEntry]) -> GraphLayout {
     let mut max_lane: i64 = -1;
 
     let first_free = |lanes: &[Option<String>]| -> usize {
-        lanes.iter().position(|l| l.is_none()).unwrap_or(lanes.len())
+        lanes
+            .iter()
+            .position(|l| l.is_none())
+            .unwrap_or(lanes.len())
     };
     let occupied = |lanes: &[Option<String>]| -> Vec<usize> {
         lanes
@@ -221,7 +222,9 @@ pub fn layout_graph(entries: &[GitLogEntry]) -> GraphLayout {
     };
 
     for entry in entries {
-        let mut lane = lanes.iter().position(|l| l.as_deref() == Some(entry.sha.as_str()));
+        let mut lane = lanes
+            .iter()
+            .position(|l| l.as_deref() == Some(entry.sha.as_str()));
         let lane = if let Some(l) = lane.take() {
             l
         } else {
@@ -262,7 +265,11 @@ pub fn layout_graph(entries: &[GitLogEntry]) -> GraphLayout {
             parents: entry.parents.clone(),
             lanes_before,
             lanes_after,
-            first_parent_lane: if first_parent.is_some() { lane as i64 } else { -1 },
+            first_parent_lane: if first_parent.is_some() {
+                lane as i64
+            } else {
+                -1
+            },
             merge_lanes,
             is_merge: entry.parents.len() > 1,
         });
@@ -291,7 +298,12 @@ UU src/conflict.ts
         assert_eq!(st.branch, "main");
         assert_eq!(st.ahead, 2);
         assert_eq!(st.behind, 1);
-        let get = |p: &str| st.entries.iter().find(|(path, _)| path == p).map(|(_, s)| *s);
+        let get = |p: &str| {
+            st.entries
+                .iter()
+                .find(|(path, _)| path == p)
+                .map(|(_, s)| *s)
+        };
         assert_eq!(get("src/staged.ts"), Some('M'));
         assert_eq!(get("src/unstaged.ts"), Some('M'));
         assert_eq!(get("src/added.ts"), Some('A'));

@@ -145,7 +145,8 @@ pub fn match_performance_preset(snapshot: &PerformancePresetValues) -> Performan
     for preset in &PERFORMANCE_PRESETS {
         let v = &preset.values;
         if snapshot.hibernate_enabled == v.hibernate_enabled
-            && normalize_hibernate_after_ms(snapshot.hibernate_after_ms as f64) == v.hibernate_after_ms
+            && normalize_hibernate_after_ms(snapshot.hibernate_after_ms as f64)
+                == v.hibernate_after_ms
             && snapshot.scrollback == v.scrollback
             && normalize_output_ring_lines(snapshot.output_ring_lines) == v.output_ring_lines
             && normalize_search_index_lines(Some(snapshot.search_index_lines as f64))
@@ -186,10 +187,7 @@ mod tests {
     fn returns_custom_when_a_knob_diverges() {
         let mut values = performance_preset(PerformancePresetId::Balanced).values;
         values.hibernate_after_ms = 12_000;
-        assert_eq!(
-            match_performance_preset(&values),
-            PerformanceMatch::Custom
-        );
+        assert_eq!(match_performance_preset(&values), PerformanceMatch::Custom);
     }
 
     #[test]
@@ -201,7 +199,10 @@ mod tests {
 
     #[test]
     fn labels_match_the_presets() {
-        assert_eq!(performance_preset(PerformancePresetId::Balanced).label, "Balanced");
+        assert_eq!(
+            performance_preset(PerformancePresetId::Balanced).label,
+            "Balanced"
+        );
         assert_eq!(
             performance_preset(PerformancePresetId::LowMemory).label,
             "Low memory"

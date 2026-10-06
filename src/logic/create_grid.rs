@@ -206,18 +206,40 @@ mod tests {
 
     #[test]
     fn max_is_four_by_four() {
-        assert!(validate_grid_spec(GridSpec { rows: 4.0, cols: 4.0 }).is_none());
-        assert_eq!(grid_cell_count(GridSpec { rows: 4.0, cols: 4.0 }), 16);
+        assert!(validate_grid_spec(GridSpec {
+            rows: 4.0,
+            cols: 4.0
+        })
+        .is_none());
         assert_eq!(
-            validate_grid_spec(GridSpec { rows: 5.0, cols: 1.0 }).as_deref(),
+            grid_cell_count(GridSpec {
+                rows: 4.0,
+                cols: 4.0
+            }),
+            16
+        );
+        assert_eq!(
+            validate_grid_spec(GridSpec {
+                rows: 5.0,
+                cols: 1.0
+            })
+            .as_deref(),
             Some("Maximum is 4×4")
         );
         assert_eq!(
-            validate_grid_spec(GridSpec { rows: 1.0, cols: 5.0 }).as_deref(),
+            validate_grid_spec(GridSpec {
+                rows: 1.0,
+                cols: 5.0
+            })
+            .as_deref(),
             Some("Maximum is 4×4")
         );
         assert_eq!(
-            validate_grid_spec(GridSpec { rows: 0.0, cols: 1.0 }).as_deref(),
+            validate_grid_spec(GridSpec {
+                rows: 0.0,
+                cols: 1.0
+            })
+            .as_deref(),
             Some("Minimum is 1×1")
         );
         assert_eq!(
@@ -235,17 +257,37 @@ mod tests {
 
     #[test]
     fn plan_rejects_the_wrong_connection_id() {
-        let err = plan_terminal_grid(GridSpec { rows: 2.0, cols: 2.0 }, GridCellKind::Remote, None, None);
-        assert_eq!(err.unwrap_err(), "Remote grids require a saved connectionId");
         let err = plan_terminal_grid(
-            GridSpec { rows: 1.0, cols: 1.0 },
+            GridSpec {
+                rows: 2.0,
+                cols: 2.0,
+            },
+            GridCellKind::Remote,
+            None,
+            None,
+        );
+        assert_eq!(
+            err.unwrap_err(),
+            "Remote grids require a saved connectionId"
+        );
+        let err = plan_terminal_grid(
+            GridSpec {
+                rows: 1.0,
+                cols: 1.0,
+            },
             GridCellKind::Local,
             Some("c1"),
             None,
         );
-        assert_eq!(err.unwrap_err(), "connectionId is only used for remote grids");
+        assert_eq!(
+            err.unwrap_err(),
+            "connectionId is only used for remote grids"
+        );
         let plan = plan_terminal_grid(
-            GridSpec { rows: 2.0, cols: 3.0 },
+            GridSpec {
+                rows: 2.0,
+                cols: 3.0,
+            },
             GridCellKind::Local,
             None,
             None,
@@ -254,7 +296,10 @@ mod tests {
         assert_eq!(plan.name, "2×3");
         assert_eq!(plan.count, 6);
         let named = plan_terminal_grid(
-            GridSpec { rows: 4.0, cols: 4.0 },
+            GridSpec {
+                rows: 4.0,
+                cols: 4.0,
+            },
             GridCellKind::Remote,
             Some("ssh-1"),
             Some("lab"),
@@ -269,7 +314,11 @@ mod tests {
         let ids: Vec<String> = (0..4).map(|i| format!("s{i}")).collect();
         let snap = build_grid_snapshot(&ids, 2, 2).unwrap();
         match snap {
-            LayoutSnapshot::Split { dir, children, sizes } => {
+            LayoutSnapshot::Split {
+                dir,
+                children,
+                sizes,
+            } => {
                 assert_eq!(dir, SplitDir::Col);
                 assert_eq!(children.len(), 2);
                 assert_eq!(sizes.len(), 2);

@@ -208,13 +208,53 @@ pub fn default_hotkeys() -> Vec<Hotkey> {
             false,
         ),
         Hotkey::def(Find, true, true, false, "f", "Find in terminal", false),
-        Hotkey::def(ClearTerminal, true, true, false, "l", "Clear terminal", false),
+        Hotkey::def(
+            ClearTerminal,
+            true,
+            true,
+            false,
+            "l",
+            "Clear terminal",
+            false,
+        ),
         Hotkey::def(ZoomIn, true, false, false, "=", "Increase font size", false),
-        Hotkey::def(ZoomInAlt, true, true, false, "+", "Increase font size", true),
-        Hotkey::def(ZoomInAlt2, true, false, false, "+", "Increase font size", true),
-        Hotkey::def(ZoomOut, true, false, false, "-", "Decrease font size", false),
+        Hotkey::def(
+            ZoomInAlt,
+            true,
+            true,
+            false,
+            "+",
+            "Increase font size",
+            true,
+        ),
+        Hotkey::def(
+            ZoomInAlt2,
+            true,
+            false,
+            false,
+            "+",
+            "Increase font size",
+            true,
+        ),
+        Hotkey::def(
+            ZoomOut,
+            true,
+            false,
+            false,
+            "-",
+            "Decrease font size",
+            false,
+        ),
         Hotkey::def(ZoomReset, true, false, false, "0", "Reset font size", false),
-        Hotkey::def(NextTerminal, true, false, false, "PageDown", "Next terminal", false),
+        Hotkey::def(
+            NextTerminal,
+            true,
+            false,
+            false,
+            "PageDown",
+            "Next terminal",
+            false,
+        ),
         Hotkey::def(
             PrevTerminal,
             true,
@@ -247,7 +287,15 @@ pub fn default_hotkeys() -> Vec<Hotkey> {
             "Search across all terminals",
             false,
         ),
-        Hotkey::def(Shortcuts, true, false, false, "/", "Keyboard shortcuts", false),
+        Hotkey::def(
+            Shortcuts,
+            true,
+            false,
+            false,
+            "/",
+            "Keyboard shortcuts",
+            false,
+        ),
         Hotkey::def(SaveEditor, true, false, false, "s", "Save file", false),
         Hotkey::def(
             PreviewMarkdown,
@@ -267,7 +315,15 @@ pub fn default_hotkeys() -> Vec<Hotkey> {
             "Toggle voice dictation",
             false,
         ),
-        Hotkey::def(NewGroup, true, true, false, "n", "New terminal group", false),
+        Hotkey::def(
+            NewGroup,
+            true,
+            true,
+            false,
+            "n",
+            "New terminal group",
+            false,
+        ),
         Hotkey::def(
             NextGroup,
             true,
@@ -295,7 +351,15 @@ pub fn default_hotkeys() -> Vec<Hotkey> {
             "Split terminal right",
             false,
         ),
-        Hotkey::def(SplitDown, true, false, true, "d", "Split terminal down", false),
+        Hotkey::def(
+            SplitDown,
+            true,
+            false,
+            true,
+            "d",
+            "Split terminal down",
+            false,
+        ),
         Hotkey::def(Agents, true, false, true, "a", "Agent overview", false),
         Hotkey::def(ToggleGit, true, false, true, "g", "Toggle Git panel", false),
     ]
@@ -551,7 +615,10 @@ mod tests {
         let split = keys.iter().find(|h| h.id == HotkeyId::SplitDown).unwrap();
         assert_eq!(combo_label(split, false), "Ctrl+Alt+D");
         assert_eq!(combo_label(split, true), "⌘⌥D");
-        let next = keys.iter().find(|h| h.id == HotkeyId::NextTerminal).unwrap();
+        let next = keys
+            .iter()
+            .find(|h| h.id == HotkeyId::NextTerminal)
+            .unwrap();
         assert_eq!(combo_label(next, false), "Ctrl+PgDn");
     }
 

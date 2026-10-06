@@ -118,8 +118,17 @@ mod tests {
     #[test]
     fn matches_tab_newline_pipe_amp_semicolon() {
         let r = rule("ls", "allow", None);
-        for cmd in ["ls\t-la", "ls\n-la", "ls | grep x", "ls && echo ok", "ls; echo ok"] {
-            assert!(match_rules(&[r.clone()], "s", cmd).is_some(), "should match: {cmd}");
+        for cmd in [
+            "ls\t-la",
+            "ls\n-la",
+            "ls | grep x",
+            "ls && echo ok",
+            "ls; echo ok",
+        ] {
+            assert!(
+                match_rules(&[r.clone()], "s", cmd).is_some(),
+                "should match: {cmd}"
+            );
         }
     }
 

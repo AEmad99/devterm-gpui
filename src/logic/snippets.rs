@@ -224,7 +224,10 @@ fn format_string_array(keys: &[String]) -> String {
 
 pub fn clear_cached_placeholders(storage: &mut dyn KvStore) -> usize {
     let raw = storage.get_item(CACHE_INDEX_KEY);
-    let keys = raw.as_deref().and_then(parse_string_array).unwrap_or_default();
+    let keys = raw
+        .as_deref()
+        .and_then(parse_string_array)
+        .unwrap_or_default();
     let mut removed = 0;
     for k in &keys {
         storage.remove_item(k);
@@ -339,7 +342,9 @@ pub fn build_frecency(hist: Option<&HistoryResult>, _now: u64) -> Vec<FrecencyEn
 
 pub fn normalize_for_dedupe(command: &str) -> String {
     let trimmed_end = command.trim_end_matches(|c: char| c.is_whitespace());
-    trimmed_end.trim_start_matches(|c: char| c.is_whitespace()).to_string()
+    trimmed_end
+        .trim_start_matches(|c: char| c.is_whitespace())
+        .to_string()
 }
 
 pub fn snippet_command_set(snippets: &[impl AsRef<str>]) -> BTreeSet<String> {
@@ -409,7 +414,10 @@ mod tests {
         );
         let mut values = HashMap::new();
         values.insert("a".into(), "x".into());
-        assert_eq!(apply_placeholders("echo {{a}} {{b}}", &values), "echo x {{b}}");
+        assert_eq!(
+            apply_placeholders("echo {{a}} {{b}}", &values),
+            "echo x {{b}}"
+        );
         assert_eq!(apply_placeholders("ls -la", &HashMap::new()), "ls -la");
     }
 

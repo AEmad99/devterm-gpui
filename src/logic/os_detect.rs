@@ -435,7 +435,9 @@ mod tests {
         thread::sleep(Duration::from_millis(30));
         abort.abort();
         let err = handle.join().unwrap().unwrap_err();
-        assert!(err.to_ascii_lowercase().contains("transport closed during startup"));
+        assert!(err
+            .to_ascii_lowercase()
+            .contains("transport closed during startup"));
     }
 
     #[test]
@@ -444,8 +446,9 @@ mod tests {
         let mut client = LateClient {
             channels: Arc::clone(&channels),
         };
-        let context = detect_remote_context(&mut client, Duration::from_millis(2), &AbortFlag::new())
-            .unwrap();
+        let context =
+            detect_remote_context(&mut client, Duration::from_millis(2), &AbortFlag::new())
+                .unwrap();
         assert_eq!(context.os, "unknown");
         thread::sleep(Duration::from_millis(80));
         let channels = channels.lock().unwrap();
@@ -466,8 +469,9 @@ mod tests {
                 }
             },
         };
-        let context = detect_remote_context(&mut client, Duration::from_millis(1000), &AbortFlag::new())
-            .unwrap();
+        let context =
+            detect_remote_context(&mut client, Duration::from_millis(1000), &AbortFlag::new())
+                .unwrap();
         assert_eq!(context.os, "unknown");
         assert!(!looks_like_windows_banner(
             "bash: powershell.exe: command not found"
@@ -484,15 +488,15 @@ mod tests {
                 if command.starts_with("uname") {
                     channel.emit_close(Some(1));
                 } else {
-                    channel.emit_data(
-                        b"Microsoft Windows [Version 10.0.22631.3447]\r\nBASTION\r\n",
-                    );
+                    channel
+                        .emit_data(b"Microsoft Windows [Version 10.0.22631.3447]\r\nBASTION\r\n");
                     channel.emit_close(Some(0));
                 }
             },
         };
-        let context = detect_remote_context(&mut client, Duration::from_millis(1000), &AbortFlag::new())
-            .unwrap();
+        let context =
+            detect_remote_context(&mut client, Duration::from_millis(1000), &AbortFlag::new())
+                .unwrap();
         assert_eq!(context.os, "windows");
         assert_eq!(context.hostname, "BASTION");
         assert_eq!(
@@ -513,8 +517,9 @@ mod tests {
                 }
             },
         };
-        let context = detect_remote_context(&mut client, Duration::from_millis(1000), &AbortFlag::new())
-            .unwrap();
+        let context =
+            detect_remote_context(&mut client, Duration::from_millis(1000), &AbortFlag::new())
+                .unwrap();
         assert_eq!(context.os, "linux");
         assert_eq!(context.hostname, "box");
         assert_eq!(context.kind, "remote");

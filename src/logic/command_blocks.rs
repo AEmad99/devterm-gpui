@@ -279,7 +279,10 @@ mod tests {
     #[test]
     fn gutters_keep_the_newest() {
         let items: Vec<i32> = (0..(MAX_COMMAND_GUTTERS as i32 + 3)).collect();
-        assert_eq!(gutters_to_release(&items, MAX_COMMAND_GUTTERS), vec![0, 1, 2]);
+        assert_eq!(
+            gutters_to_release(&items, MAX_COMMAND_GUTTERS),
+            vec![0, 1, 2]
+        );
         assert!(gutters_to_release(&[1, 2, 3], 3).is_empty());
     }
 

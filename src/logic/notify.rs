@@ -53,7 +53,12 @@ pub fn settings_json_contains_bot_token(json: &str) -> bool {
 /// omitted. This is what `notify-secrets.json` stores.
 pub fn secrets_document(secrets: &NotifySecrets) -> Vec<(String, String)> {
     let mut out = Vec::new();
-    if let Some(v) = secrets.webhook_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(v) = secrets
+        .webhook_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         out.push(("webhookUrl".into(), v.to_string()));
     }
     if let Some(v) = secrets
@@ -174,8 +179,12 @@ mod tests {
             telegram_bot_token: Some("123:ABC".into()),
             telegram_chat_id: Some("".into()),
         });
-        assert!(doc.iter().any(|(k, v)| k == "telegramBotToken" && v == "123:ABC"));
-        assert!(doc.iter().any(|(k, v)| k == "webhookUrl" && v == "https://example.com/hook"));
+        assert!(doc
+            .iter()
+            .any(|(k, v)| k == "telegramBotToken" && v == "123:ABC"));
+        assert!(doc
+            .iter()
+            .any(|(k, v)| k == "webhookUrl" && v == "https://example.com/hook"));
         assert!(doc.iter().all(|(k, _)| k != "telegramChatId"));
     }
 

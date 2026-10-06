@@ -44,12 +44,7 @@ pub enum Json {
 
 impl Json {
     pub fn object(pairs: Vec<(&str, Json)>) -> Self {
-        Json::Object(
-            pairs
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v))
-                .collect(),
-        )
+        Json::Object(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
     }
 
     pub fn get(&self, key: &str) -> Option<&Json> {
@@ -73,7 +68,12 @@ fn is_secret_key(key: &str, fields: &[&str]) -> bool {
 
 pub fn strip_named_secrets(value: Json, fields: &[&str]) -> Json {
     match value {
-        Json::Array(items) => Json::Array(items.into_iter().map(|v| strip_named_secrets(v, fields)).collect()),
+        Json::Array(items) => Json::Array(
+            items
+                .into_iter()
+                .map(|v| strip_named_secrets(v, fields))
+                .collect(),
+        ),
         Json::Object(pairs) => {
             let mut out = Vec::new();
             for (k, v) in pairs {
@@ -99,7 +99,8 @@ pub fn sanitize_connection(value: Json) -> Option<Json> {
     let Json::Object(pairs) = value else {
         return None;
     };
-    if let Some(Json::String(protocol)) = pairs.iter().find(|(k, _)| k == "protocol").map(|(_, v)| v)
+    if let Some(Json::String(protocol)) =
+        pairs.iter().find(|(k, _)| k == "protocol").map(|(_, v)| v)
     {
         if protocol != "ssh" {
             return None;
@@ -498,7 +499,10 @@ pub fn normalize_stt(incoming: &SttSettings, fallback: &SttSettings) -> SttSetti
     }
 }
 
-pub fn normalize_agent_preferences(value: &AgentPreferences, fallback: &AgentPreferences) -> AgentPreferences {
+pub fn normalize_agent_preferences(
+    value: &AgentPreferences,
+    fallback: &AgentPreferences,
+) -> AgentPreferences {
     AgentPreferences {
         provider: value.provider.chars().take(120).collect(),
         model: value.model.chars().take(240).collect(),
@@ -613,7 +617,8 @@ pub fn merge_snapshot_with_defaults(raw: &SettingsSnapshot) -> AppSettings {
         out.hibernate_after_ms = normalize_hibernate_after_ms(raw.hibernate_after_ms);
     }
     if raw.output_ring_lines.is_some() {
-        out.output_ring_lines = normalize_output_ring_lines(raw.output_ring_lines, out.output_ring_lines);
+        out.output_ring_lines =
+            normalize_output_ring_lines(raw.output_ring_lines, out.output_ring_lines);
     }
     if raw.search_index_lines.is_some() {
         out.search_index_lines = normalize_search_index_lines(raw.search_index_lines);
@@ -704,7 +709,10 @@ pub fn merge_by_id(current: Vec<IdRecord>, incoming: Vec<IdRecord>) -> Vec<IdRec
         }
         by_id.insert(r.id.clone(), r);
     }
-    order.into_iter().filter_map(|id| by_id.remove(&id)).collect()
+    order
+        .into_iter()
+        .filter_map(|id| by_id.remove(&id))
+        .collect()
 }
 
 #[derive(Clone, Debug)]
@@ -798,7 +806,10 @@ mod tests {
         assert!(dropped.is_none());
 
         let leaked = Json::object(vec![
-            ("webhookUrl", Json::String("https://hooks.example/secret".into())),
+            (
+                "webhookUrl",
+                Json::String("https://hooks.example/secret".into()),
+            ),
             ("apiKey", Json::String("ak_live".into())),
             ("token", Json::String("tok".into())),
             ("telegramBotToken", Json::String("123:abc".into())),
@@ -827,7 +838,10 @@ mod tests {
             ..SettingsSnapshot::default()
         };
         let next = apply_imported(&current, &incoming);
-        assert!(next.welcome_hint_seen, "dismissed getting started must survive import");
+        assert!(
+            next.welcome_hint_seen,
+            "dismissed getting started must survive import"
+        );
         assert!(next.first_run.local_terminal);
         assert!(next.zen_mode);
         assert_eq!(next.prefs.font_size, 16.0);

@@ -73,7 +73,11 @@ pub fn capturable_sessions(sessions: &[Session], group_id: &str) -> Vec<Session>
         .collect()
 }
 
-pub fn capture_workspace(sessions: &[Session], group_id: &str, layout_root: Option<&LayoutNode>) -> (Vec<WorkspaceItem>, Option<LayoutNode>) {
+pub fn capture_workspace(
+    sessions: &[Session],
+    group_id: &str,
+    layout_root: Option<&LayoutNode>,
+) -> (Vec<WorkspaceItem>, Option<LayoutNode>) {
     let capturable = capturable_sessions(sessions, group_id);
     let mut sid_to_item = Vec::new();
     let items: Vec<WorkspaceItem> = capturable
@@ -84,7 +88,12 @@ pub fn capture_workspace(sessions: &[Session], group_id: &str, layout_root: Opti
             sid_to_item.push((s.id.clone(), id.clone()));
             WorkspaceItem {
                 id,
-                kind: if s.kind == "remote" { "remote" } else { "local" }.into(),
+                kind: if s.kind == "remote" {
+                    "remote"
+                } else {
+                    "local"
+                }
+                .into(),
                 connection_id: if s.kind == "remote" {
                     s.connection_id.clone()
                 } else {
@@ -131,7 +140,11 @@ fn snapshot_node(n: &LayoutNode, items: &[(String, String)]) -> Option<LayoutNod
             };
             Some(LayoutNode::Leaf { tabs: kept, active })
         }
-        LayoutNode::Split { dir, sizes, children } => {
+        LayoutNode::Split {
+            dir,
+            sizes,
+            children,
+        } => {
             let mut kept = Vec::new();
             let mut kept_sizes = Vec::new();
             for (i, c) in children.iter().enumerate() {
@@ -147,7 +160,11 @@ fn snapshot_node(n: &LayoutNode, items: &[(String, String)]) -> Option<LayoutNod
                 return Some(kept.remove(0));
             }
             let total: f64 = kept_sizes.iter().sum::<f64>();
-            let total = if total == 0.0 { kept.len() as f64 } else { total };
+            let total = if total == 0.0 {
+                kept.len() as f64
+            } else {
+                total
+            };
             Some(LayoutNode::Split {
                 dir: dir.clone(),
                 sizes: kept_sizes.into_iter().map(|s| s / total).collect(),
@@ -195,7 +212,11 @@ impl WorkspaceStore {
     }
 
     pub fn auto_launch(&self) -> Vec<Workspace> {
-        self.workspaces.iter().filter(|w| w.auto_launch).cloned().collect()
+        self.workspaces
+            .iter()
+            .filter(|w| w.auto_launch)
+            .cloned()
+            .collect()
     }
 
     /// Insert or replace. Launch stats the caller omitted are kept from the
@@ -328,7 +349,10 @@ impl WorkspaceStore {
 fn remap_layout(n: &LayoutNode, map: &[(String, String)]) -> Option<LayoutNode> {
     match n {
         LayoutNode::Leaf { tabs, active } => {
-            let tabs: Vec<String> = tabs.iter().filter_map(|t| lookup(map, t).map(|s| s.to_string())).collect();
+            let tabs: Vec<String> = tabs
+                .iter()
+                .filter_map(|t| lookup(map, t).map(|s| s.to_string()))
+                .collect();
             if tabs.is_empty() {
                 return None;
             }
@@ -338,8 +362,15 @@ fn remap_layout(n: &LayoutNode, map: &[(String, String)]) -> Option<LayoutNode> 
                 .unwrap_or_else(|| tabs.last().cloned().unwrap_or_default());
             Some(LayoutNode::Leaf { tabs, active })
         }
-        LayoutNode::Split { dir, sizes, children } => {
-            let children: Vec<LayoutNode> = children.iter().filter_map(|c| remap_layout(c, map)).collect();
+        LayoutNode::Split {
+            dir,
+            sizes,
+            children,
+        } => {
+            let children: Vec<LayoutNode> = children
+                .iter()
+                .filter_map(|c| remap_layout(c, map))
+                .collect();
             if children.is_empty() {
                 return None;
             }
@@ -421,7 +452,9 @@ mod tests {
         let (items, _) = capture_workspace(&sessions, "g1", None);
         assert_eq!(items.len(), 2);
         assert!(items.iter().any(|i| i.kind == "local"));
-        assert!(items.iter().any(|i| i.connection_id.as_deref() == Some("conn-1")));
+        assert!(items
+            .iter()
+            .any(|i| i.connection_id.as_deref() == Some("conn-1")));
         assert!(items.iter().all(|i| i.title.as_deref() != Some("adhoc")));
     }
 
@@ -526,7 +559,10 @@ mod tests {
         assert!(!boot.recorded);
         assert_eq!(store.launched_from(&boot.group_id), Some("w1"));
         assert_eq!(store.list()[0].launch_count, None);
-        assert!(boot.failures.iter().any(|f| f.contains("saved connection not found")));
+        assert!(boot
+            .failures
+            .iter()
+            .any(|f| f.contains("saved connection not found")));
         let manual = store.launch_into_group("w1", 11, true).unwrap();
         assert!(manual.recorded);
         assert_eq!(store.list()[0].launch_count, Some(1));

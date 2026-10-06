@@ -39,10 +39,9 @@ pub fn to_loadable_url(raw: &str) -> Option<String> {
     } else if s.to_ascii_lowercase().starts_with("http:") {
         return Some(s.to_string());
     }
-    if !s
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ':' | '[' | ']' | '%' | '/'))
-    {
+    if !s.chars().all(|c| {
+        c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ':' | '[' | ']' | '%' | '/')
+    }) {
         return None;
     }
     Some(format!("http://{s}"))
@@ -162,7 +161,10 @@ impl CertificatePromptBroker {
     }
 
     pub fn pending(&self) -> Vec<BrowserCertificatePrompt> {
-        self.waiting.values().map(|row| row.prompt.clone()).collect()
+        self.waiting
+            .values()
+            .map(|row| row.prompt.clone())
+            .collect()
     }
 
     /// Block until reply or timeout. Timeout resolves `false`.
@@ -329,7 +331,8 @@ fn json_quote(s: &str) -> String {
 
 pub fn parse_snapshot(raw: &str) -> Result<SnapshotPayload, String> {
     let title = json_string_field(raw, "title").unwrap_or_default();
-    let url = json_string_field(raw, "url").ok_or_else(|| "malformed snapshot payload".to_string())?;
+    let url =
+        json_string_field(raw, "url").ok_or_else(|| "malformed snapshot payload".to_string())?;
     let root = if raw.contains("\"root\"") {
         Some(OutlineNode::role("page"))
     } else {
@@ -447,10 +450,7 @@ pub fn stale_ref_error(r: &str) -> String {
 }
 
 fn resolve_prelude(r: &str) -> String {
-    let missing = json_quote(&format!(
-        "{{\"err\":{}}}",
-        ""
-    ));
+    let missing = json_quote(&format!("{{\"err\":{}}}", ""));
     let _ = missing;
     let err = format!("{{\"err\":{}}}", json_quote(&stale_ref_error(r)));
     format!(
@@ -520,17 +520,28 @@ pub fn build_fill_script(
     )
 }
 
-pub fn build_select_script(r: &str, label: Option<&str>, value: Option<&str>, index: Option<i64>) -> String {
+pub fn build_select_script(
+    r: &str,
+    label: Option<&str>,
+    value: Option<&str>,
+    index: Option<i64>,
+) -> String {
     let value_js = value.map(json_quote).unwrap_or_else(|| "null".into());
     let label_js = label.map(json_quote).unwrap_or_else(|| "null".into());
-    let index_js = index.map(|n| n.to_string()).unwrap_or_else(|| "null".into());
+    let index_js = index
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "null".into());
     format!(
         "(function(){{\n{}\nvar wantValue={value_js},wantLabel={label_js},wantIndex={index_js};\nif((el.tagName||'').toLowerCase()!=='select'){{\n  return JSON.stringify({{err:'ref is not a native <select> — use browser_click on the combobox/option refs instead',tag:(el.tagName||'').toLowerCase()}});\n}}\nvar opts=el.options||[];\nvar chosen=-1;\nif(wantIndex!==null&&wantIndex>=0&&wantIndex<opts.length)chosen=wantIndex;\nelse if(wantValue!==null){{for(var i=0;i<opts.length;i++){{if(String(opts[i].value)===String(wantValue)){{chosen=i;break}}}}}}\nelse if(wantLabel!==null){{for(var j=0;j<opts.length;j++){{if(String(opts[j].text).trim()===String(wantLabel).trim()){{chosen=j;break}}}}}}\nif(chosen<0)return JSON.stringify({{err:'no matching option (value/label/index)'}});\nel.selectedIndex=chosen;\ntry{{el.focus({{preventScroll:true}})}}catch(_e){{}}\nel.dispatchEvent(new Event('input',{{bubbles:true}}));\nel.dispatchEvent(new Event('change',{{bubbles:true}}));\nvar o=opts[chosen];\nvar r=el.getBoundingClientRect();\nreturn JSON.stringify({{ok:true,detail:'selected \"'+String(o.text).slice(0,80)+'\"',value:String(o.value),x:r.left+r.width/2,y:r.top+r.height/2,vw:window.innerWidth||0,vh:window.innerHeight||0}})\n}})()",
         resolve_prelude(r)
     )
 }
 
-pub fn build_scroll_script(r: Option<&str>, direction: Option<&str>, pixels: Option<i64>) -> String {
+pub fn build_scroll_script(
+    r: Option<&str>,
+    direction: Option<&str>,
+    pixels: Option<i64>,
+) -> String {
     let dir = json_quote(direction.unwrap_or("down"));
     let px = pixels.unwrap_or(600).clamp(1, 10000);
     if let Some(r) = r {
@@ -691,17 +702,26 @@ mod tests {
 
     #[test]
     fn to_loadable_url_cases() {
-        assert_eq!(to_loadable_url("localhost:3000").as_deref(), Some("http://localhost:3000"));
+        assert_eq!(
+            to_loadable_url("localhost:3000").as_deref(),
+            Some("http://localhost:3000")
+        );
         assert_eq!(
             to_loadable_url(" 10.0.0.5:8080/app ").as_deref(),
             Some("http://10.0.0.5:8080/app")
         );
-        assert_eq!(to_loadable_url("https://x.com").as_deref(), Some("https://x.com"));
+        assert_eq!(
+            to_loadable_url("https://x.com").as_deref(),
+            Some("https://x.com")
+        );
         assert_eq!(
             to_loadable_url("file:///etc/passwd").as_deref(),
             Some("file:///etc/passwd")
         );
-        assert_eq!(to_loadable_url("about:blank").as_deref(), Some("about:blank"));
+        assert_eq!(
+            to_loadable_url("about:blank").as_deref(),
+            Some("about:blank")
+        );
         assert_eq!(to_loadable_url(""), None);
         assert_eq!(to_loadable_url("   "), None);
         assert_eq!(to_loadable_url("javascript:alert(1)"), None);
@@ -962,23 +982,48 @@ mod tests {
 
     #[test]
     fn pointer_uses_viewport_fractions() {
-        let placed = place_agent_pointer(Some(100.0), Some(50.0), Some(200.0), Some(100.0), Some(2.0), 800.0, 400.0);
+        let placed = place_agent_pointer(
+            Some(100.0),
+            Some(50.0),
+            Some(200.0),
+            Some(100.0),
+            Some(2.0),
+            800.0,
+            400.0,
+        );
         assert!(placed.ready);
         assert!(!placed.centered);
         assert_eq!(placed.x, Some(400.0));
         assert_eq!(placed.y, Some(200.0));
         assert!(!placed.clamped);
         assert_eq!(placed.label_side, "right");
-        let placed = place_agent_pointer(Some(10.0), Some(20.0), None, None, Some(2.0), 400.0, 300.0);
+        let placed =
+            place_agent_pointer(Some(10.0), Some(20.0), None, None, Some(2.0), 400.0, 300.0);
         assert_eq!(placed.x, Some(20.0));
         assert_eq!(placed.y, Some(40.0));
-        let placed = place_agent_pointer(Some(80.0), Some(40.0), Some(800.0), Some(600.0), None, 0.0, 0.0);
+        let placed = place_agent_pointer(
+            Some(80.0),
+            Some(40.0),
+            Some(800.0),
+            Some(600.0),
+            None,
+            0.0,
+            0.0,
+        );
         assert!(!placed.ready);
         assert_eq!(placed.x, None);
         assert!(!placed.centered);
         let centered = place_agent_pointer(None, None, None, None, None, 500.0, 400.0);
         assert!(centered.centered && centered.ready);
-        let edge = place_agent_pointer(Some(900.0), Some(10.0), Some(1000.0), Some(800.0), None, 500.0, 400.0);
+        let edge = place_agent_pointer(
+            Some(900.0),
+            Some(10.0),
+            Some(1000.0),
+            Some(800.0),
+            None,
+            500.0,
+            400.0,
+        );
         assert!(edge.clamped);
         assert_eq!(edge.label_side, "left");
         assert!(edge.x.unwrap() <= 500.0 - 18.0);

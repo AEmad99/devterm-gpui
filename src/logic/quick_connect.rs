@@ -339,7 +339,10 @@ impl<'a> Parser<'a> {
         if self.peek() == Some(b'-') {
             self.index += 1;
         }
-        while matches!(self.peek(), Some(b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')) {
+        while matches!(
+            self.peek(),
+            Some(b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
+        ) {
             self.index += 1;
         }
         let text = std::str::from_utf8(&self.bytes[start..self.index]).ok()?;
@@ -376,9 +379,7 @@ mod tests {
         store.record("a.example", 2222, "op", 11).unwrap();
         assert_eq!(store.list().len(), 3);
         for n in 0..20 {
-            store
-                .record(&format!("h{n}"), 22, "user", 100 + n)
-                .unwrap();
+            store.record(&format!("h{n}"), 22, "user", 100 + n).unwrap();
         }
         let listed = store.list();
         assert_eq!(MAX_ENTRIES, 20);

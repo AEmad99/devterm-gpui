@@ -449,7 +449,11 @@ pub fn summarize_agent_task_limited(task: &str, max_len: usize) -> String {
         let end = value.find(char::is_whitespace).unwrap_or(value.len());
         let path = &value[..end];
         let base = folder_name(path);
-        let base = if base.is_empty() { path.to_string() } else { base };
+        let base = if base.is_empty() {
+            path.to_string()
+        } else {
+            base
+        };
         return truncate(&format!("{tool} {base}"), max_len);
     }
     if let Some((name_len, value)) = first_kv(rest) {
@@ -532,7 +536,10 @@ fn derive_context(s: &TabLabelInput) -> Option<String> {
         }
     }
     if s.agent_pending_approval {
-        return Some(format!("{}: awaiting approval", agent_label(s.agent_kind.as_deref())));
+        return Some(format!(
+            "{}: awaiting approval",
+            agent_label(s.agent_kind.as_deref())
+        ));
     }
     if let Some(task) = &s.agent_task {
         let prefix = if s.agent_kind.is_some() {
@@ -645,10 +652,7 @@ pub fn derive_tab_label(s: &TabLabelInput) -> TabLabel {
         default_base_title(s)
     };
     let context = derive_context(s);
-    let shown = context
-        .as_ref()
-        .filter(|c| c.as_str() != title)
-        .cloned();
+    let shown = context.as_ref().filter(|c| c.as_str() != title).cloned();
     let tooltip = build_tooltip(s, &title, context.as_deref());
     TabLabel {
         title,

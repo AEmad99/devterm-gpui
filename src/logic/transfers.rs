@@ -41,7 +41,11 @@ pub struct TransferItem {
 }
 
 pub fn dest_partial_path(direction: &str, local_path: &str, remote_path: &str) -> String {
-    let dest = if direction == "download" { local_path } else { remote_path };
+    let dest = if direction == "download" {
+        local_path
+    } else {
+        remote_path
+    };
     if dest.ends_with(".partial") {
         dest.to_string()
     } else {
@@ -231,7 +235,9 @@ pub struct TransferStats {
 
 pub fn compute_stats(samples: &[RateSample], total: i64, now_bytes: i64) -> TransferStats {
     let percent = if total > 0 {
-        ((now_bytes as f64 / total as f64) * 100.0).round().min(100.0) as i64
+        ((now_bytes as f64 / total as f64) * 100.0)
+            .round()
+            .min(100.0) as i64
     } else {
         0
     };
@@ -257,7 +263,11 @@ pub fn compute_stats(samples: &[RateSample], total: i64, now_bytes: i64) -> Tran
     let remaining = (total - now_bytes).max(0) as f64;
     TransferStats {
         rate_bps: Some(rate),
-        eta_sec: if rate > 0.0 { Some(remaining / rate) } else { None },
+        eta_sec: if rate > 0.0 {
+            Some(remaining / rate)
+        } else {
+            None
+        },
         percent,
     }
 }
@@ -498,9 +508,10 @@ where
 
 fn prepare_and_copy(item: &TransferItem, remote_root: &Path) -> Result<i64, String> {
     let is_download = item.direction == "download";
-    let partial = item.partial_path.clone().unwrap_or_else(|| {
-        dest_partial_path(&item.direction, &item.local_path, &item.remote_path)
-    });
+    let partial = item
+        .partial_path
+        .clone()
+        .unwrap_or_else(|| dest_partial_path(&item.direction, &item.local_path, &item.remote_path));
     let resume = item.transferred > 0;
     if is_download {
         let remote_file = map_remote(remote_root, &item.remote_path);
@@ -523,10 +534,16 @@ fn prepare_and_copy(item: &TransferItem, remote_root: &Path) -> Result<i64, Stri
                     ));
                 }
             };
-            if let Some(err) = verify_partial_size(item.transferred, partial_size, "Local partial") {
+            if let Some(err) = verify_partial_size(item.transferred, partial_size, "Local partial")
+            {
                 return Err(err);
             }
-            copy_range(&remote_file, Path::new(&partial), item.transferred, source_size)?;
+            copy_range(
+                &remote_file,
+                Path::new(&partial),
+                item.transferred,
+                source_size,
+            )?;
             replace_local(Path::new(&partial), Path::new(&item.local_path))?;
             return Ok(source_size);
         }
@@ -568,7 +585,8 @@ fn copy_range(src: &Path, dest: &Path, offset: i64, total: i64) -> Result<(), St
         .open(dest)
         .map_err(|e| e.to_string())?;
     if offset > 0 {
-        out.seek(SeekFrom::Start(offset as u64)).map_err(|e| e.to_string())?;
+        out.seek(SeekFrom::Start(offset as u64))
+            .map_err(|e| e.to_string())?;
     }
     out.write_all(&buf).map_err(|e| e.to_string())?;
     let _ = total;
@@ -811,7 +829,10 @@ mod tests {
     fn scratch(label: &str) -> PathBuf {
         let dir = temp_dir().join(format!(
             "dt-{label}-{}",
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -849,7 +870,10 @@ mod tests {
             dest_partial_path("upload", "C:\\tmp\\a.bin", "/home/a.bin"),
             "/home/a.bin.partial"
         );
-        assert_eq!(dest_partial_path("download", "/tmp/a.partial", "/r"), "/tmp/a.partial");
+        assert_eq!(
+            dest_partial_path("download", "/tmp/a.partial", "/r"),
+            "/tmp/a.partial"
+        );
         assert!(verify_source_fingerprint(Some(10), Some(5), 10, 5, "Remote").is_none());
         let err = verify_source_fingerprint(Some(10), Some(5), 11, 5, "Remote").unwrap();
         assert!(err.contains("Remote file changed"));
@@ -1041,7 +1065,10 @@ mod tests {
 
         let samples = vec![
             RateSample { t: 0, bytes: 0 },
-            RateSample { t: 2000, bytes: 2048 },
+            RateSample {
+                t: 2000,
+                bytes: 2048,
+            },
         ];
         let s = compute_stats(&samples, 8192, 2048);
         assert_eq!(s.rate_bps, Some(1024.0));

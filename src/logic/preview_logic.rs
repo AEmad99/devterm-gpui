@@ -76,7 +76,13 @@ pub fn normalize_annotation(raw: Option<&AnnInput>) -> Option<PreviewAnnotation>
     let o = raw?;
     let id = o.id.as_deref().map(str::trim).filter(|s| !s.is_empty())?;
     let kind = o.kind.as_deref().filter(|k| KINDS.contains(k))?;
-    let body = o.body.as_deref().unwrap_or("").chars().take(4000).collect::<String>();
+    let body = o
+        .body
+        .as_deref()
+        .unwrap_or("")
+        .chars()
+        .take(4000)
+        .collect::<String>();
     let x = clamp01(o.x.unwrap_or(f64::NAN));
     let y = clamp01(o.y.unwrap_or(f64::NAN));
     let w = clamp01(o.w.unwrap_or(f64::NAN));
@@ -131,7 +137,8 @@ impl AnnotationStore {
     }
 
     fn file(&self, session_id: &str) -> PathBuf {
-        self.dir().join(format!("{}.json", annotation_file_name(session_id)))
+        self.dir()
+            .join(format!("{}.json", annotation_file_name(session_id)))
     }
 
     pub fn load(&self, session_id: &str) -> Vec<PreviewAnnotation> {
@@ -349,7 +356,14 @@ fn json_field_number(obj: &str, key: &str) -> Option<f64> {
         end += 1;
     }
     let start_digits = end;
-    while end < b.len() && (b[end].is_ascii_digit() || b[end] == b'.' || b[end] == b'e' || b[end] == b'E' || b[end] == b'+' || b[end] == b'-') {
+    while end < b.len()
+        && (b[end].is_ascii_digit()
+            || b[end] == b'.'
+            || b[end] == b'e'
+            || b[end] == b'E'
+            || b[end] == b'+'
+            || b[end] == b'-')
+    {
         end += 1;
     }
     if end == start_digits {
@@ -385,7 +399,9 @@ fn percent_decode(s: &str) -> String {
     let mut i = 0;
     while i < b.len() {
         if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16) {
+            if let Ok(v) =
+                u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16)
+            {
                 out.push(v);
                 i += 3;
                 continue;
@@ -428,7 +444,10 @@ pub fn start_folder_server(folder_path: &Path) -> Result<FolderServe, String> {
         .canonicalize()
         .map_err(|_| format!("Folder is not a directory: {}", folder_path.display()))?;
     if !root.is_dir() {
-        return Err(format!("Folder is not a directory: {}", folder_path.display()));
+        return Err(format!(
+            "Folder is not a directory: {}",
+            folder_path.display()
+        ));
     }
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|_| "Failed to bind preview server".to_string())?;
