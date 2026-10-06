@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod editor;
+pub mod icons;
 pub mod logic;
 pub mod persist;
 pub mod ssh_config;

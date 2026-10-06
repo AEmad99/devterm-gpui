@@ -16,6 +16,7 @@ use gpui::{
 };
 
 use crate::editor::{self, EditorDoc};
+use crate::icons::{file_kind, glyph, Icon};
 use crate::logic::hotkeys::{match_hotkey, KeyEvent};
 use crate::logic::settings::AppSettings;
 use crate::persist;
@@ -901,28 +902,23 @@ impl Shell {
                     .flex_col()
                     .items_center()
                     .gap(px(4.))
+                    .child(rail_button(Icon::Folder, self.library == Some(Library::Files), cx, |this, _| {
+                        this.toggle_library(Library::Files);
+                    }))
                     .child(rail_button(
-                        "▤",
-                        self.library == Some(Library::Files),
-                        cx,
-                        |this, _| {
-                            this.toggle_library(Library::Files);
-                        },
-                    ))
-                    .child(rail_button(
-                        "◎",
+                        Icon::Remote,
                         self.library == Some(Library::Connections),
                         cx,
                         |this, _| this.toggle_library(Library::Connections),
                     ))
                     .child(rail_button(
-                        "▦",
+                        Icon::Group,
                         self.library == Some(Library::Workspaces),
                         cx,
                         |this, _| this.toggle_library(Library::Workspaces),
                     ))
                     .child(rail_button(
-                        "</>",
+                        Icon::Keyboard,
                         self.library == Some(Library::Snippets),
                         cx,
                         |this, _| this.toggle_library(Library::Snippets),
@@ -936,7 +932,7 @@ impl Shell {
                     .items_center()
                     .gap(px(4.))
                     .child(div().w(px(18.)).h(px(1.)).bg(theme::border()))
-                    .child(rail_button("⎇", self.git_open, cx, |this, _| {
+                    .child(rail_button(Icon::Branch, self.git_open, cx, |this, _| {
                         this.git_open = !this.git_open;
                         if this.git_open {
                             this.git = git_snapshot(&this.work_dir);
@@ -950,11 +946,11 @@ impl Shell {
                                 .child(changes.to_string()),
                         )
                     })
-                    .child(rail_button("●", false, cx, |this, _| {
+                    .child(rail_button(Icon::Mic, false, cx, |this, _| {
                         this.status = "Dictation is push-to-talk (Ctrl+Shift+M). Weights are downloaded on first use and are not in the package.".into();
                     }))
                     .child(rail_button(
-                        "?",
+                        Icon::Keyboard,
                         self.modal == Some(Modal::Shortcuts),
                         cx,
                         |this, _| {
@@ -962,7 +958,7 @@ impl Shell {
                         },
                     ))
                     .child(rail_button(
-                        "⚙",
+                        Icon::Settings,
                         self.modal == Some(Modal::Settings),
                         cx,
                         |this, _| {
@@ -996,6 +992,9 @@ impl Shell {
                 );
                 body.push(
                     div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
                         .text_xs()
                         .px(px(6.))
                         .py(px(4.))
@@ -1008,11 +1007,20 @@ impl Shell {
                         } else {
                             theme::border()
                         })
-                        .child(if filter.is_empty() {
-                            "Filter".to_string()
-                        } else {
-                            filter.clone()
-                        })
+                        .child(glyph(Icon::Search, 12., theme::muted()))
+                        .child(
+                            div()
+                                .text_color(if filter.is_empty() {
+                                    theme::muted()
+                                } else {
+                                    theme::fg()
+                                })
+                                .child(if filter.is_empty() {
+                                    "Filter files…".to_string()
+                                } else {
+                                    filter.clone()
+                                }),
+                        )
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(|this, _, _, cx| {
@@ -1186,20 +1194,22 @@ impl Shell {
     fn file_row(&self, name: &str, dir: bool, cx: &mut Context<Self>) -> AnyElement {
         let label = name.to_string();
         let cwd = self.files_cwd.clone();
+        let kind = file_kind(&label, dir);
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
-            .px(px(8.))
-            .py(px(6.))
-            .rounded(px(6.))
+            .gap(px(5.))
+            .h(px(22.))
+            .px(px(6.))
+            .rounded(px(4.))
             .hover(|style| style.bg(theme::hover()))
-            .child(
-                div()
-                    .text_color(theme::accent())
-                    .child(if dir { "▸" } else { "·" }),
-            )
-            .child(div().text_sm().child(label.clone()))
+            .child(if dir && label != ".." {
+                glyph(Icon::ChevronDown, 13., theme::muted())
+            } else {
+                glyph(Icon::ChevronDown, 13., rgba(0x00000000))
+            })
+            .child(glyph(kind.icon(), 15., kind.color()))
+            .child(div().text_xs().text_color(theme::fg()).child(label.clone()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
@@ -1306,7 +1316,11 @@ impl Shell {
                     .text_color(if active { theme::fg() } else { theme::muted() })
                     .when(active, |el| el.bg(theme::group_active()))
                     .hover(|style| style.text_color(theme::fg()))
-                    .child("▦")
+                    .child(glyph(
+                        Icon::Group,
+                        14.,
+                        if active { theme::fg() } else { theme::muted() },
+                    ))
                     .child(name)
                     .child(
                         div()
@@ -1321,7 +1335,7 @@ impl Shell {
                             div()
                                 .text_color(theme::muted())
                                 .hover(|style| style.text_color(theme::danger()))
-                                .child("×")
+                                .child(glyph(Icon::Close, 12., theme::muted()))
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, _, _, cx| {
@@ -1357,7 +1371,7 @@ impl Shell {
                     .px(px(8.))
                     .text_color(theme::muted())
                     .hover(|style| style.text_color(theme::fg()))
-                    .child("+")
+                    .child(glyph(Icon::Plus, 14., theme::muted()))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
@@ -1376,6 +1390,10 @@ impl Shell {
                     .border_color(theme::border())
                     .text_xs()
                     .text_color(theme::muted())
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(glyph(Icon::Save, 13., theme::muted()))
                     .child("Save")
                     .on_mouse_down(
                         MouseButton::Left,
@@ -1565,7 +1583,7 @@ impl Shell {
                         div()
                             .text_color(theme::muted())
                             .hover(|style| style.text_color(theme::danger()))
-                            .child("×")
+                            .child(glyph(Icon::Close, 12., theme::muted()))
                             .on_mouse_down(
                                 MouseButton::Left,
                                 cx.listener(move |this, _, _, cx| {
@@ -1678,11 +1696,13 @@ impl Shell {
                     })
                     .children(tabs)
                     .child(div().flex_1())
-                    .child(strip_button("✦", cx, |this, _| {
+                    .child(strip_button(Icon::Agent, cx, |this, _| {
                         this.open_agent();
                     }))
-                    .child(strip_button("⧉", cx, |this, cx| this.split_right(cx)))
-                    .child(strip_button("+", cx, |this, cx| this.new_tab(cx))),
+                    .child(strip_button(Icon::Split, cx, |this, cx| {
+                        this.split_right(cx)
+                    }))
+                    .child(strip_button(Icon::Plus, cx, |this, cx| this.new_tab(cx))),
             )
             .child(
                 div()
@@ -1909,6 +1929,7 @@ impl Shell {
             })
             .child(div().flex_1())
             .child(status_button(
+                Icon::Activity,
                 "Activity",
                 self.activity_open,
                 cx,
@@ -1917,6 +1938,7 @@ impl Shell {
                 },
             ))
             .child(status_button(
+                Icon::Transfer,
                 "Transfers",
                 self.transfers_open,
                 cx,
@@ -1924,10 +1946,16 @@ impl Shell {
                     this.transfers_open = !this.transfers_open;
                 },
             ))
-            .child(status_button("DevTerm", self.agent_open, cx, |this, _| {
-                this.agent_open = !this.agent_open;
-                this.agent_done = true;
-            }))
+            .child(status_button(
+                Icon::Agent,
+                "DevTerm",
+                self.agent_open,
+                cx,
+                |this, _| {
+                    this.agent_open = !this.agent_open;
+                    this.agent_done = true;
+                },
+            ))
     }
 
     fn render_git(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -2019,7 +2047,7 @@ impl Shell {
                                 .items_center()
                                 .child(div().text_size(px(15.)).child(title))
                                 .child(div().flex_1())
-                                .child(div().text_color(theme::muted()).child("×").on_mouse_down(
+                                .child(glyph(Icon::Close, 14., theme::muted()).on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(|this, _, _, cx| {
                                         this.modal = None;
@@ -2254,11 +2282,12 @@ fn display_path(path: &Path) -> String {
 }
 
 fn rail_button(
-    glyph: &'static str,
+    icon: Icon,
     active: bool,
     cx: &mut Context<Shell>,
     on_press: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Div {
+    let color = if active { theme::fg() } else { theme::muted() };
     div()
         .w(px(32.))
         .h(px(32.))
@@ -2266,10 +2295,10 @@ fn rail_button(
         .items_center()
         .justify_center()
         .rounded(px(4.))
-        .text_color(if active { theme::fg() } else { theme::muted() })
+        .text_color(color)
         .when(active, |el| el.bg(theme::accent_quiet()))
         .hover(|style| style.bg(theme::hover()).text_color(theme::fg()))
-        .child(glyph)
+        .child(glyph(icon, 16., color))
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, window, cx| {
@@ -2310,7 +2339,7 @@ fn button(
 }
 
 fn strip_button(
-    glyph: &'static str,
+    icon: Icon,
     cx: &mut Context<Shell>,
     on_press: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Div {
@@ -2323,7 +2352,7 @@ fn strip_button(
         .rounded(px(4.))
         .text_color(theme::muted())
         .hover(|style| style.bg(theme::hover()).text_color(theme::fg()))
-        .child(glyph)
+        .child(glyph(icon, 15., theme::muted()))
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, window, cx| {
@@ -2335,14 +2364,20 @@ fn strip_button(
 }
 
 fn status_button(
+    icon: Icon,
     label: &'static str,
     active: bool,
     cx: &mut Context<Shell>,
     on_press: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Div {
+    let color = if active { theme::fg() } else { theme::muted() };
     div()
-        .text_color(if active { theme::fg() } else { theme::muted() })
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .text_color(color)
         .hover(|style| style.text_color(theme::fg()))
+        .child(glyph(icon, 12., color))
         .child(label)
         .on_mouse_down(
             MouseButton::Left,
