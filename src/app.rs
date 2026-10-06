@@ -2,23 +2,27 @@
 //!
 //! The chrome follows the Electron app: a 40px icon rail, an optional library
 //! column, the group bar, pane tabs over the terminal, and a 22px status bar.
-//! Local shells are real PTYs. SSH, the agent process, and the browser pane
-//! are still the Electron app's job.
+//! Local shells are real PTYs. SSH, the editor, settings, and agent launch
+//! call the ported DevTerm logic directly.
 
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use gpui::prelude::*;
 use gpui::{
     canvas, div, px, rgba, size, AnyElement, App, Bounds, Context, FocusHandle, Focusable,
-    KeyDownEvent, MouseButton, TitlebarOptions, Window, WindowBounds, WindowOptions,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollWheelEvent,
+    TitlebarOptions, Window, WindowBounds, WindowOptions,
 };
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 
+use crate::editor::{self, EditorDoc};
+use crate::icons::{file_kind, glyph, Icon};
+use crate::logic::hotkeys::{match_hotkey, KeyEvent};
+use crate::logic::settings::AppSettings;
+use crate::persist;
 use crate::ssh_config::{parse_ssh_config, SshHost};
+use crate::term_view::{self, PtyMsg, SpawnOpts, TermView};
 use crate::theme;
-use crate::vt::Grid;
 
 const SNIPPETS: &[(&str, &str, &str)] = &[
     ("List files", "ls -la", "ls -la\n"),
@@ -41,46 +45,14 @@ enum Modal {
     Palette,
 }
 
-enum PtyMsg {
-    Data(Vec<u8>),
-    Exit,
-}
-
-struct LivePty {
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    master: Box<dyn MasterPty + Send>,
-    child: Box<dyn Child + Send + Sync>,
-}
-
-impl LivePty {
-    fn write(&self, bytes: &[u8]) {
-        if let Ok(mut writer) = self.writer.lock() {
-            let _ = writer.write_all(bytes);
-            let _ = writer.flush();
-        }
-    }
-
-    fn resize(&mut self, cols: usize, rows: usize) {
-        let _ = self.master.resize(PtySize {
-            rows: rows as u16,
-            cols: cols as u16,
-            pixel_width: 0,
-            pixel_height: 0,
-        });
-    }
-}
-
-impl Drop for LivePty {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-    }
-}
-
 struct Session {
     title: String,
-    grid: Grid,
-    live: Option<LivePty>,
-    exited: bool,
+    view: TermView,
+    origin_x: f32,
+    origin_y: f32,
+    cell_w: f32,
+    cell_h: f32,
+    remote: Option<std::sync::mpsc::Sender<Vec<u8>>>,
 }
 
 #[derive(Clone)]
@@ -114,6 +86,15 @@ pub struct Shell {
     agent_open: bool,
     activity_open: bool,
     transfers_open: bool,
+    dragging: bool,
+    focus_mode: bool,
+    zen_mode: bool,
+    settings: AppSettings,
+    file_filter: String,
+    filter_focus: bool,
+    editor: Option<EditorDoc>,
+    editor_active: bool,
+    agent_child: Option<std::process::Child>,
     welcome_dismissed: bool,
     ssh_done: bool,
     agent_done: bool,
@@ -134,6 +115,10 @@ pub struct Shell {
 impl Shell {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let work_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let settings = persist::load_settings();
+        let welcome_seen = settings.welcome_hint_seen;
+        let zen = settings.zen_mode;
+        theme::set_id(&settings.theme_id);
         let mut shell = Self {
             focus: cx.focus_handle(),
             library: None,
@@ -141,7 +126,16 @@ impl Shell {
             agent_open: false,
             activity_open: false,
             transfers_open: false,
-            welcome_dismissed: false,
+            dragging: false,
+            focus_mode: false,
+            zen_mode: zen,
+            settings,
+            file_filter: String::new(),
+            filter_focus: false,
+            editor: None,
+            editor_active: false,
+            agent_child: None,
+            welcome_dismissed: welcome_seen,
             ssh_done: false,
             agent_done: false,
             modal: None,
@@ -184,34 +178,44 @@ impl Shell {
     fn spawn_session(&mut self, cx: &mut Context<Self>) -> u64 {
         let id = self.alloc();
         let title = shell_title();
-        match spawn_shell() {
-            Ok((live, rx)) => {
+        match TermView::spawn(&SpawnOpts::default()) {
+            Ok((view, rx)) => {
                 self.sessions.insert(
                     id,
                     Session {
                         title,
-                        grid: Grid::new(80, 24),
-                        live: Some(live),
-                        exited: false,
+                        view,
+                        origin_x: 0.0,
+                        origin_y: 0.0,
+                        cell_w: 8.0,
+                        cell_h: 16.0,
+                        remote: None,
                     },
                 );
                 pump_pty(id, rx, cx);
             }
             Err(err) => {
-                let mut grid = Grid::new(80, 24);
+                let mut view = TermView::open(80, 24, 10_000);
                 let message = format!("Could not open a local shell: {err}\r\n");
-                grid.feed_bytes(message.as_bytes());
+                view.push_bytes(message.as_bytes());
+                view.note_exit(None);
                 self.sessions.insert(
                     id,
                     Session {
                         title,
-                        grid,
-                        live: None,
-                        exited: true,
+                        view,
+                        origin_x: 0.0,
+                        origin_y: 0.0,
+                        cell_w: 8.0,
+                        cell_h: 16.0,
+                        remote: None,
                     },
                 );
                 self.status = "Local shell failed".into();
             }
+        }
+        if let Some(session) = self.sessions.get_mut(&id) {
+            session.view.set_palette(theme::terminal_palette());
         }
         id
     }
@@ -240,6 +244,44 @@ impl Shell {
             pane.active = session;
         }
         self.status = "Opened a local terminal".into();
+    }
+
+    fn start_remote(&mut self, host: &str, user: &str, port: u16, cx: &mut Context<Self>) {
+        let link = crate::ssh_session::connect(host, user, port);
+        let id = self.alloc();
+        let mut view = TermView::open(80, 24, self.settings.prefs.scrollback as usize);
+        view.set_palette(theme::terminal_palette());
+        self.sessions.insert(
+            id,
+            Session {
+                title: format!("{user}@{host}"),
+                view,
+                origin_x: 0.0,
+                origin_y: 0.0,
+                cell_w: 8.0,
+                cell_h: 16.0,
+                remote: Some(link.input),
+            },
+        );
+        if let Some(group) = self.active_group_mut() {
+            if group.panes.is_empty() {
+                group.panes.push(Pane {
+                    tabs: vec![id],
+                    active: id,
+                });
+                group.active_pane = 0;
+            } else {
+                let index = group.active_pane.min(group.panes.len() - 1);
+                let pane = &mut group.panes[index];
+                pane.tabs.push(id);
+                pane.active = id;
+            }
+        }
+        pump_pty(id, link.output, cx);
+        self.ssh_done = true;
+        self.settings.first_run.imported_ssh = true;
+        let _ = persist::save_settings(&self.settings);
+        self.status = format!("Connecting to {user}@{host}:{port}");
     }
 
     fn split_right(&mut self, cx: &mut Context<Self>) {
@@ -309,6 +351,7 @@ impl Shell {
     }
 
     fn select_tab(&mut self, pane_index: usize, session: u64) {
+        self.editor_active = false;
         if let Some(group) = self.active_group_mut() {
             if let Some(pane) = group.panes.get_mut(pane_index) {
                 if pane.tabs.contains(&session) {
@@ -319,36 +362,39 @@ impl Shell {
         }
     }
 
-    fn write_active(&self, bytes: &[u8]) {
-        let Some(group) = self
-            .groups
-            .iter()
-            .find(|group| group.id == self.active_group)
-        else {
+    fn write_active(&mut self, bytes: &[u8]) {
+        let Some(id) = self.active_session_id() else {
             return;
         };
-        let Some(pane) = group.panes.get(group.active_pane) else {
-            return;
-        };
-        if let Some(session) = self.sessions.get(&pane.active) {
-            if let Some(live) = &session.live {
-                live.write(bytes);
+        if let Some(session) = self.sessions.get_mut(&id) {
+            if let Some(remote) = &session.remote {
+                let _ = remote.send(bytes.to_vec());
+            } else {
+                session.view.write(bytes);
             }
         }
     }
 
-    fn note_size(&mut self, id: u64, cols: usize, rows: usize) -> bool {
+    fn note_size(
+        &mut self,
+        id: u64,
+        cols: usize,
+        rows: usize,
+        pixel_width: u16,
+        pixel_height: u16,
+        origin_x: f32,
+        origin_y: f32,
+        cell_w: f32,
+        cell_h: f32,
+    ) -> bool {
         let Some(session) = self.sessions.get_mut(&id) else {
             return false;
         };
-        if session.grid.cols == cols && session.grid.rows == rows {
-            return false;
-        }
-        session.grid.resize(cols, rows);
-        if let Some(live) = session.live.as_mut() {
-            live.resize(cols, rows);
-        }
-        true
+        session.origin_x = origin_x;
+        session.origin_y = origin_y;
+        session.cell_w = cell_w;
+        session.cell_h = cell_h;
+        session.view.resize(cols, rows, pixel_width, pixel_height)
     }
 
     fn reload_files(&mut self) {
@@ -444,11 +490,390 @@ impl Shell {
             cx.stop_propagation();
             return;
         }
+        let hotkey = KeyEvent {
+            ctrl: mods.control,
+            meta: mods.platform,
+            shift: mods.shift,
+            alt: mods.alt,
+            key: hotkey_name(&key),
+        };
+        if let Some(id) = match_hotkey(&hotkey, None) {
+            if self.handle_hotkey(id, cx) {
+                cx.notify();
+                window.prevent_default();
+                cx.stop_propagation();
+                return;
+            }
+        }
+        if self.filter_focus {
+            self.filter_key(&key, event);
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if self.editor_active {
+            if self.editor_key(&key, event) {
+                window.prevent_default();
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
+        }
+        if self.find_captures_keys() {
+            self.find_key(&key, event);
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if let Some(bytes) = pty_bytes(event) {
             self.write_active(&bytes);
             window.prevent_default();
             cx.stop_propagation();
         }
+    }
+
+    fn handle_hotkey(
+        &mut self,
+        id: crate::logic::hotkeys::HotkeyId,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        use crate::logic::hotkeys::HotkeyId::*;
+        match id {
+            Palette | PaletteAlt => self.modal = Some(Modal::Palette),
+            NewTerminal => self.new_tab(cx),
+            NewGroup => self.new_group(cx),
+            CloseTerminal => {
+                if let Some(session) = self.active_session_id() {
+                    self.close_session(session);
+                }
+            }
+            ToggleSidebar => self.toggle_library(Library::Files),
+            Find => {
+                if let Some(session) = self.active_session_id() {
+                    if let Some(view) = self.sessions.get_mut(&session) {
+                        view.view.open_find();
+                    }
+                }
+            }
+            Settings => self.modal = Some(Modal::Settings),
+            Shortcuts => self.modal = Some(Modal::Shortcuts),
+            ToggleGit => {
+                self.git_open = !self.git_open;
+                if self.git_open {
+                    self.git = git_snapshot(&self.work_dir);
+                }
+            }
+            SplitRight => self.split_right(cx),
+            ToggleFocus => {
+                self.focus_mode = !self.focus_mode;
+                if self.focus_mode {
+                    self.zen_mode = false;
+                }
+            }
+            ToggleZenMode => {
+                self.zen_mode = !self.zen_mode;
+                self.settings.zen_mode = self.zen_mode;
+                crate::logic::settings::set_zen_mode(&mut self.settings, self.zen_mode);
+                let _ = persist::save_settings(&self.settings);
+            }
+            SaveEditor => {
+                if let Some(doc) = self.editor.as_mut() {
+                    match editor::save_file(doc) {
+                        Ok(()) => {
+                            doc.dirty = false;
+                            self.status = format!("Saved {}", doc.path.display());
+                        }
+                        Err(err) => self.status = err,
+                    }
+                }
+            }
+            PreviewMarkdown => {
+                if let Some(doc) = self.editor.as_mut() {
+                    editor::cycle_preview(doc);
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn find_captures_keys(&self) -> bool {
+        self.active_session_id()
+            .and_then(|id| self.sessions.get(&id))
+            .map(|session| session.view.find_open())
+            .unwrap_or(false)
+    }
+
+    fn find_key(&mut self, key: &str, event: &KeyDownEvent) {
+        let Some(id) = self.active_session_id() else {
+            return;
+        };
+        let Some(session) = self.sessions.get_mut(&id) else {
+            return;
+        };
+        match key {
+            "escape" => session.view.close_find(),
+            "enter" | "return" => {
+                let _ = session.view.find_next(!event.keystroke.modifiers.shift);
+            }
+            "backspace" => {
+                let mut query = session.view.find_query().to_string();
+                query.pop();
+                session.view.set_find_query(query);
+            }
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_deref() {
+                    if event.keystroke.modifiers.control
+                        || event.keystroke.modifiers.alt
+                        || event.keystroke.modifiers.platform
+                    {
+                        return;
+                    }
+                    let mut query = session.view.find_query().to_string();
+                    query.push_str(text);
+                    session.view.set_find_query(query);
+                }
+            }
+        }
+    }
+
+    fn pointer(&mut self, id: u64, x: f32, y: f32, down: bool, motion: bool) -> bool {
+        if motion && !self.dragging {
+            return false;
+        }
+        if !motion {
+            self.dragging = down;
+        }
+        let Some(session) = self.sessions.get_mut(&id) else {
+            return false;
+        };
+        if session.cell_w < 1.0 || session.cell_h < 1.0 {
+            return false;
+        }
+        let col = ((x - session.origin_x) / session.cell_w).floor().max(0.0) as usize;
+        let row = ((y - session.origin_y) / session.cell_h).floor().max(0.0) as usize;
+        session.view.mouse(
+            term_view::MouseButton::Left,
+            col,
+            row,
+            down && !motion,
+            motion,
+        )
+    }
+
+    fn filter_key(&mut self, key: &str, event: &KeyDownEvent) {
+        match key {
+            "escape" | "enter" | "return" => self.filter_focus = false,
+            "backspace" => {
+                self.file_filter.pop();
+            }
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_deref() {
+                    if !event.keystroke.modifiers.control && !event.keystroke.modifiers.platform {
+                        self.file_filter.push_str(text);
+                    }
+                }
+            }
+        }
+    }
+
+    fn editor_key(&mut self, key: &str, event: &KeyDownEvent) -> bool {
+        let Some(doc) = self.editor.as_mut() else {
+            return false;
+        };
+        if doc.mode == crate::logic::markdown_preview::MarkdownPreviewMode::Preview
+            && key != "escape"
+        {
+            return false;
+        }
+        match key {
+            "escape" => {
+                self.editor_active = false;
+                true
+            }
+            "backspace" => {
+                doc.text.pop();
+                doc.dirty = true;
+                true
+            }
+            "enter" | "return" => {
+                doc.text.push('\n');
+                doc.dirty = true;
+                true
+            }
+            "tab" => {
+                doc.text.push_str("    ");
+                doc.dirty = true;
+                true
+            }
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_deref() {
+                    if event.keystroke.modifiers.control || event.keystroke.modifiers.platform {
+                        return false;
+                    }
+                    doc.text.push_str(text);
+                    doc.dirty = true;
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fn set_theme(&mut self, id: &str) {
+        self.settings.theme_id = id.to_string();
+        self.settings.first_run.picked_theme = true;
+        theme::set_id(id);
+        let palette = theme::terminal_palette();
+        for session in self.sessions.values_mut() {
+            session.view.set_palette(palette);
+        }
+        let _ = persist::save_settings(&self.settings);
+    }
+
+    fn open_agent(&mut self) {
+        self.agent_done = true;
+        self.agent_open = true;
+        if self.agent_child.is_some() {
+            self.status = format!("Agent already running ({})", self.settings.agent_kind);
+            return;
+        }
+        let bridge = crate::logic::agent_launch::Bridge {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "local".into(),
+            port: 9,
+        };
+        let extras = crate::logic::agent_launch::LaunchExtras {
+            native_local: true,
+            spawn_cwd: Some(self.work_dir.display().to_string()),
+            resume_sessions: self.settings.agent_preferences.resume_sessions,
+            ..crate::logic::agent_launch::LaunchExtras::default()
+        };
+        let prepared =
+            if self.settings.agent_kind == "devterm" || self.settings.agent_kind.is_empty() {
+                crate::logic::agent_launch::prepare_builtin_agent_launch("", &bridge, &extras)
+            } else {
+                Err(crate::logic::agent_launch::assert_agent_bin_available(
+                    &self.settings.agent_kind,
+                )
+                .err()
+                .unwrap_or_else(|| {
+                    format!("launch {} from the agent picker", self.settings.agent_kind)
+                }))
+            };
+        match prepared {
+            Ok(spec) => match std::process::Command::new(&spec.bin)
+                .args(&spec.args)
+                .current_dir(&spec.cwd)
+                .envs(spec.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                .spawn()
+            {
+                Ok(child) => {
+                    self.agent_child = Some(child);
+                    self.status = format!("Agent started ({})", spec.bin);
+                }
+                Err(err) => self.status = format!("Agent failed to start: {err}"),
+            },
+            Err(err) => self.status = err,
+        }
+    }
+
+    fn stop_agent(&mut self) {
+        if let Some(mut child) = self.agent_child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        self.status = "Agent stopped".into();
+    }
+
+    fn save_workspace(&mut self) {
+        let mut items = Vec::new();
+        for (id, session) in &self.sessions {
+            items.push(serde_json::json!({
+                "id": id.to_string(),
+                "title": session.title,
+                "cwd": session.view.cwd(),
+                "remote": session.remote.is_some(),
+            }));
+        }
+        let path = persist::user_data_dir().join("workspaces.json");
+        let mut existing = persist::read_text(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .and_then(|value| value.get("workspaces").cloned())
+            .unwrap_or_else(|| serde_json::json!([]));
+        if let Some(list) = existing.as_array_mut() {
+            list.push(serde_json::json!({
+                "name": "Saved group",
+                "items": items,
+            }));
+        }
+        let body = serde_json::json!({ "workspaces": existing });
+        match persist::write_private(
+            &path,
+            &serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".into()),
+        ) {
+            Ok(()) => self.status = format!("Saved workspace to {}", path.display()),
+            Err(err) => self.status = err.to_string(),
+        }
+    }
+
+    fn settings_body(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let current = self.settings.theme_id.clone();
+        let shell = self.settings.default_shell.kind.clone();
+        let mut rows: Vec<AnyElement> = Vec::new();
+        rows.push(
+            div()
+                .text_xs()
+                .text_color(theme::muted())
+                .child(format!("Shell · {shell}"))
+                .into_any_element(),
+        );
+        for spec in crate::logic::themes::themes() {
+            let id = spec.id.to_string();
+            let name = spec.name.to_string();
+            let selected = id == current;
+            rows.push(
+                div()
+                    .px(px(8.))
+                    .py(px(4.))
+                    .rounded(px(4.))
+                    .text_xs()
+                    .text_color(if selected {
+                        theme::fg()
+                    } else {
+                        theme::muted()
+                    })
+                    .when(selected, |el| el.bg(theme::accent_quiet()))
+                    .hover(|style| style.bg(theme::hover()))
+                    .child(name)
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, _, cx| {
+                            this.set_theme(&id);
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    )
+                    .into_any_element(),
+            );
+        }
+        rows.push(
+            div()
+                .text_xs()
+                .text_color(theme::muted())
+                .child("Export writes settings.json with secrets removed. Import merges through the same normalizers and does not bring the getting-started row back.")
+                .into_any_element(),
+        );
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .children(rows)
+            .into_any_element()
     }
 
     fn active_session_id(&self) -> Option<u64> {
@@ -478,28 +903,23 @@ impl Shell {
                     .flex_col()
                     .items_center()
                     .gap(px(4.))
+                    .child(rail_button(Icon::Folder, self.library == Some(Library::Files), cx, |this, _| {
+                        this.toggle_library(Library::Files);
+                    }))
                     .child(rail_button(
-                        "▤",
-                        self.library == Some(Library::Files),
-                        cx,
-                        |this, _| {
-                            this.toggle_library(Library::Files);
-                        },
-                    ))
-                    .child(rail_button(
-                        "◎",
+                        Icon::Remote,
                         self.library == Some(Library::Connections),
                         cx,
                         |this, _| this.toggle_library(Library::Connections),
                     ))
                     .child(rail_button(
-                        "▦",
+                        Icon::Group,
                         self.library == Some(Library::Workspaces),
                         cx,
                         |this, _| this.toggle_library(Library::Workspaces),
                     ))
                     .child(rail_button(
-                        "</>",
+                        Icon::Keyboard,
                         self.library == Some(Library::Snippets),
                         cx,
                         |this, _| this.toggle_library(Library::Snippets),
@@ -513,7 +933,7 @@ impl Shell {
                     .items_center()
                     .gap(px(4.))
                     .child(div().w(px(18.)).h(px(1.)).bg(theme::border()))
-                    .child(rail_button("⎇", self.git_open, cx, |this, _| {
+                    .child(rail_button(Icon::Branch, self.git_open, cx, |this, _| {
                         this.git_open = !this.git_open;
                         if this.git_open {
                             this.git = git_snapshot(&this.work_dir);
@@ -527,11 +947,11 @@ impl Shell {
                                 .child(changes.to_string()),
                         )
                     })
-                    .child(rail_button("●", false, cx, |this, _| {
-                        this.status = "Dictation stays on the Electron app for now".into();
+                    .child(rail_button(Icon::Mic, false, cx, |this, _| {
+                        this.status = "Dictation is push-to-talk (Ctrl+Shift+M). Weights are downloaded on first use and are not in the package.".into();
                     }))
                     .child(rail_button(
-                        "?",
+                        Icon::Keyboard,
                         self.modal == Some(Modal::Shortcuts),
                         cx,
                         |this, _| {
@@ -539,7 +959,7 @@ impl Shell {
                         },
                     ))
                     .child(rail_button(
-                        "⚙",
+                        Icon::Settings,
                         self.modal == Some(Modal::Settings),
                         cx,
                         |this, _| {
@@ -562,20 +982,64 @@ impl Shell {
         let mut body: Vec<AnyElement> = Vec::new();
         match library {
             Library::Files => {
+                let filter = self.file_filter.clone();
                 body.push(
                     div()
                         .text_xs()
                         .text_color(theme::muted())
-                        .pb(px(8.))
+                        .pb(px(4.))
                         .child(display_path(&self.files_cwd))
+                        .into_any_element(),
+                );
+                body.push(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .text_xs()
+                        .px(px(6.))
+                        .py(px(4.))
+                        .mb(px(6.))
+                        .rounded(px(4.))
+                        .bg(theme::panel2())
+                        .border_1()
+                        .border_color(if self.filter_focus {
+                            theme::accent()
+                        } else {
+                            theme::border()
+                        })
+                        .child(glyph(Icon::Search, 12., theme::muted()))
+                        .child(
+                            div()
+                                .text_color(if filter.is_empty() {
+                                    theme::muted()
+                                } else {
+                                    theme::fg()
+                                })
+                                .child(if filter.is_empty() {
+                                    "Filter files…".to_string()
+                                } else {
+                                    filter.clone()
+                                }),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, _, cx| {
+                                this.filter_focus = true;
+                                cx.stop_propagation();
+                                cx.notify();
+                            }),
+                        )
                         .into_any_element(),
                 );
                 if self.files_cwd.parent().is_some() {
                     body.push(self.file_row("..", true, cx));
                 }
+                let needle = filter.to_lowercase();
                 let rows: Vec<(String, bool)> = self
                     .file_rows
                     .iter()
+                    .filter(|row| needle.is_empty() || row.name.to_lowercase().contains(&needle))
                     .map(|row| (row.name.clone(), row.dir))
                     .collect();
                 for (name, dir) in rows {
@@ -626,19 +1090,48 @@ impl Shell {
                                         div().text_xs().text_color(theme::muted()).child(subtitle),
                                     ),
                             )
-                            .child(button("Connect", true, cx, move |this, _| {
-                                this.status = format!(
-                                    "{label} is listed. SSH sessions land with the russh port."
-                                );
+                            .child(button("Connect", true, cx, move |this, cx| {
+                                let target =
+                                    host.host_name.clone().unwrap_or_else(|| host.name.clone());
+                                let user = host.user.clone().unwrap_or_else(|| {
+                                    std::env::var("USER").unwrap_or_else(|_| "root".into())
+                                });
+                                this.start_remote(&target, &user, 22, cx);
                             }))
                             .into_any_element(),
                     );
                 }
             }
             Library::Workspaces => {
-                body.push(empty_copy(
-                    "No workspaces yet. The group bar Save button is the same action as the Electron app; the workspace file is not written in this slice.",
-                ));
+                let path = persist::user_data_dir().join("workspaces.json");
+                let saved = persist::read_text(&path)
+                    .ok()
+                    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+                let rows = saved
+                    .as_ref()
+                    .and_then(|value| value.get("workspaces"))
+                    .and_then(|value| value.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if rows.is_empty() {
+                    body.push(empty_copy(
+                        "No workspaces yet. Save on the group bar writes workspaces.json.",
+                    ));
+                }
+                for row in rows {
+                    let name = row
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Workspace");
+                    body.push(
+                        div()
+                            .px(px(8.))
+                            .py(px(6.))
+                            .text_sm()
+                            .child(name.to_string())
+                            .into_any_element(),
+                    );
+                }
             }
             Library::Snippets => {
                 for (name, detail, body_text) in SNIPPETS {
@@ -702,26 +1195,35 @@ impl Shell {
     fn file_row(&self, name: &str, dir: bool, cx: &mut Context<Self>) -> AnyElement {
         let label = name.to_string();
         let cwd = self.files_cwd.clone();
+        let kind = file_kind(&label, dir);
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
-            .px(px(8.))
-            .py(px(6.))
-            .rounded(px(6.))
+            .gap(px(5.))
+            .h(px(22.))
+            .px(px(6.))
+            .rounded(px(4.))
             .hover(|style| style.bg(theme::hover()))
-            .child(
-                div()
-                    .text_color(theme::accent())
-                    .child(if dir { "▸" } else { "·" }),
-            )
-            .child(div().text_sm().child(label.clone()))
+            .child(if dir && label != ".." {
+                glyph(Icon::ChevronDown, 13., theme::muted())
+            } else {
+                glyph(Icon::ChevronDown, 13., rgba(0x00000000))
+            })
+            .child(glyph(kind.icon(), 15., kind.color()))
+            .child(div().text_xs().text_color(theme::fg()).child(label.clone()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
                     if !dir {
-                        this.status =
-                            format!("{label} is listed. The editor opens in a later slice.");
+                        let path = cwd.join(&label);
+                        match editor::open_file(&path) {
+                            Ok(doc) => {
+                                this.editor = Some(doc);
+                                this.editor_active = true;
+                                this.status = format!("Editing {}", path.display());
+                            }
+                            Err(err) => this.status = err,
+                        }
                         cx.notify();
                         return;
                     }
@@ -748,10 +1250,28 @@ impl Shell {
                 "No agent activity yet. The bridge log arrives with the agent process.",
             )
         });
-        let transfers = self.transfers_open.then(|| {
-            dock_note("Transfers", "No transfers. The persistent SFTP queue stays on the Electron app until russh-sftp is wired.")
-        });
+        let transfer_note = {
+            let mut store = crate::logic::transfers::TransferStore::new(&persist::user_data_dir());
+            let items = store.load();
+            let running = items
+                .iter()
+                .filter(|item| {
+                    !item.done && item.paused != Some(true) && item.canceled != Some(true)
+                })
+                .count();
+            if items.is_empty() {
+                "No transfers.".to_string()
+            } else {
+                format!("{} queued, {running} running", items.len())
+            }
+        };
+        let transfers = self
+            .transfers_open
+            .then(|| dock_note("Transfers", transfer_note));
         let status = self.render_status(cx);
+        let zen = self.zen_mode;
+        let focus = self.focus_mode;
+        let show_status = self.settings.show_status_bar && !zen && !focus;
         div()
             .flex_1()
             .min_w(px(0.))
@@ -759,12 +1279,13 @@ impl Shell {
             .flex()
             .flex_col()
             .bg(theme::bg())
-            .child(group_bar)
-            .children(welcome)
+            .when(!zen, move |el| el.child(group_bar))
+            .when(!zen && !focus, move |el| el.children(welcome))
             .child(panes)
-            .children(activity)
-            .children(transfers)
-            .child(status)
+            .when(!zen && !focus, move |el| {
+                el.children(activity).children(transfers)
+            })
+            .when(show_status, move |el| el.child(status))
     }
 
     fn render_group_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -796,7 +1317,11 @@ impl Shell {
                     .text_color(if active { theme::fg() } else { theme::muted() })
                     .when(active, |el| el.bg(theme::group_active()))
                     .hover(|style| style.text_color(theme::fg()))
-                    .child("▦")
+                    .child(glyph(
+                        Icon::Group,
+                        14.,
+                        if active { theme::fg() } else { theme::muted() },
+                    ))
                     .child(name)
                     .child(
                         div()
@@ -811,7 +1336,7 @@ impl Shell {
                             div()
                                 .text_color(theme::muted())
                                 .hover(|style| style.text_color(theme::danger()))
-                                .child("×")
+                                .child(glyph(Icon::Close, 12., theme::muted()))
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, _, _, cx| {
@@ -847,7 +1372,7 @@ impl Shell {
                     .px(px(8.))
                     .text_color(theme::muted())
                     .hover(|style| style.text_color(theme::fg()))
-                    .child("+")
+                    .child(glyph(Icon::Plus, 14., theme::muted()))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
@@ -866,12 +1391,16 @@ impl Shell {
                     .border_color(theme::border())
                     .text_xs()
                     .text_color(theme::muted())
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(glyph(Icon::Save, 13., theme::muted()))
                     .child("Save")
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
                             this.library = Some(Library::Workspaces);
-                            this.status = "Workspace save is not written in this slice yet".into();
+                            this.save_workspace();
                             cx.notify();
                         }),
                     ),
@@ -885,7 +1414,7 @@ impl Shell {
         let local_done = self
             .sessions
             .values()
-            .any(|session| session.live.is_some() || session.exited);
+            .any(|session| !session.view.shell().is_empty() || session.view.exited());
         let cards = vec![
             welcome_card(
                 "Local terminal",
@@ -952,6 +1481,8 @@ impl Shell {
                                     MouseButton::Left,
                                     cx.listener(|this, _, _, cx| {
                                         this.welcome_dismissed = true;
+                                        this.settings.welcome_hint_seen = true;
+                                        let _ = persist::save_settings(&this.settings);
                                         cx.notify();
                                     }),
                                 ),
@@ -1028,7 +1559,7 @@ impl Shell {
             let selected = *session_id == pane.active;
             let title = session.title.clone();
             let id = *session_id;
-            let dot = if session.exited {
+            let dot = if session.view.exited() {
                 theme::danger()
             } else {
                 theme::ok()
@@ -1053,7 +1584,7 @@ impl Shell {
                         div()
                             .text_color(theme::muted())
                             .hover(|style| style.text_color(theme::danger()))
-                            .child("×")
+                            .child(glyph(Icon::Close, 12., theme::muted()))
                             .on_mouse_down(
                                 MouseButton::Left,
                                 cx.listener(move |this, _, _, cx| {
@@ -1074,15 +1605,68 @@ impl Shell {
                     .into_any_element(),
             );
         }
-        let session_id = pane.active;
-        let lines = self.sessions.get(&session_id).map(|session| {
-            let mut rows: Vec<AnyElement> = Vec::new();
-            for row in 0..session.grid.rows {
-                let cursor = (session.grid.cursor_row == row).then_some(session.grid.cursor_col);
-                rows.push(term_line(&session.grid.line(row), cursor));
+        if active_pane {
+            if let Some(doc) = &self.editor {
+                let name = doc
+                    .path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("editor")
+                    .to_string();
+                let dirty = doc.dirty;
+                let selected = self.editor_active;
+                tabs.push(
+                    div()
+                        .h_full()
+                        .flex()
+                        .items_center()
+                        .px(px(8.))
+                        .text_xs()
+                        .text_color(if selected {
+                            theme::fg()
+                        } else {
+                            theme::muted()
+                        })
+                        .when(selected, |el| el.bg(theme::panel2()))
+                        .child(if dirty { format!("{name} •") } else { name })
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, window, cx| {
+                                window.focus(&this.focus);
+                                this.editor_active = true;
+                                cx.notify();
+                            }),
+                        )
+                        .into_any_element(),
+                );
             }
-            rows
-        });
+        }
+        let session_id = pane.active;
+        let find_open = self
+            .sessions
+            .get(&session_id)
+            .map(|session| session.view.find_open())
+            .unwrap_or(false);
+        let find_query = self
+            .sessions
+            .get(&session_id)
+            .map(|session| session.view.find_query().to_string())
+            .unwrap_or_default();
+        let editor_text = (active_pane && self.editor_active)
+            .then(|| self.editor.as_ref())
+            .flatten()
+            .map(|doc| {
+                let body = match doc.mode {
+                    crate::logic::markdown_preview::MarkdownPreviewMode::Edit => doc.text.clone(),
+                    _ => editor::preview_html(doc),
+                };
+                let count = body.chars().count();
+                if count > 4000 {
+                    body.chars().skip(count - 4000).collect()
+                } else {
+                    body
+                }
+            });
         let entity = cx.entity().clone();
         div()
             .flex_1()
@@ -1113,12 +1697,13 @@ impl Shell {
                     })
                     .children(tabs)
                     .child(div().flex_1())
-                    .child(strip_button("✦", cx, |this, _| {
-                        this.agent_open = !this.agent_open;
-                        this.agent_done = true;
+                    .child(strip_button(Icon::Agent, cx, |this, _| {
+                        this.open_agent();
                     }))
-                    .child(strip_button("⧉", cx, |this, cx| this.split_right(cx)))
-                    .child(strip_button("+", cx, |this, cx| this.new_tab(cx))),
+                    .child(strip_button(Icon::Split, cx, |this, cx| {
+                        this.split_right(cx)
+                    }))
+                    .child(strip_button(Icon::Plus, cx, |this, cx| this.new_tab(cx))),
             )
             .child(
                 div()
@@ -1126,38 +1711,145 @@ impl Shell {
                     .min_h(px(0.))
                     .relative()
                     .overflow_hidden()
-                    .p(px(8.))
-                    .font_family("Cascadia Mono")
+                    .font_family("DejaVu Sans Mono")
                     .text_size(px(13.))
-                    .line_height(px(18.))
                     .text_color(theme::fg())
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |this, _, window, cx| {
+                        cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                             window.focus(&this.focus);
                             this.select_tab(index, session_id);
-                            cx.notify();
+                            if this.pointer(
+                                session_id,
+                                event.position.x.into(),
+                                event.position.y.into(),
+                                true,
+                                false,
+                            ) {
+                                cx.notify();
+                            }
                         }),
                     )
-                    .children(lines.unwrap_or_default())
+                    .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
+                        let dragging = this.dragging;
+                        if this.pointer(
+                            session_id,
+                            event.position.x.into(),
+                            event.position.y.into(),
+                            dragging,
+                            true,
+                        ) {
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(move |this, event: &MouseUpEvent, _, cx| {
+                            if this.pointer(
+                                session_id,
+                                event.position.x.into(),
+                                event.position.y.into(),
+                                false,
+                                false,
+                            ) {
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .on_scroll_wheel(cx.listener(move |this, event: &ScrollWheelEvent, _, cx| {
+                        let lines = match event.delta {
+                            gpui::ScrollDelta::Lines(delta) => delta.y,
+                            gpui::ScrollDelta::Pixels(delta) => f32::from(delta.y) / 18.0,
+                        };
+                        if let Some(session) = this.sessions.get_mut(&session_id) {
+                            session.view.scroll_lines(-lines as i32);
+                        }
+                        cx.notify();
+                    }))
+                    .when(find_open, |el| {
+                        el.child(
+                            div()
+                                .absolute()
+                                .top(px(4.))
+                                .right(px(4.))
+                                .px(px(8.))
+                                .py(px(4.))
+                                .bg(theme::panel())
+                                .border_1()
+                                .border_color(theme::border())
+                                .text_xs()
+                                .child(format!("Find: {find_query}")),
+                        )
+                    })
                     .child(
                         canvas(
-                            move |bounds, _, app| {
-                                let cols = (bounds.size.width / px(7.8)).floor() as usize;
-                                let rows = (bounds.size.height / px(18.)).floor() as usize;
-                                let cols = cols.clamp(20, 400);
-                                let rows = rows.clamp(4, 200);
-                                let _ = entity.update(app, |shell, cx| {
-                                    if shell.note_size(session_id, cols, rows) {
-                                        cx.notify();
-                                    }
-                                });
+                            {
+                                let entity = entity.clone();
+                                move |bounds, window, app| {
+                                    let (cell_w, cell_h) = term_view::measure_cell(window, 13.0);
+                                    let cols = (bounds.size.width / cell_w).floor() as usize;
+                                    let rows = (bounds.size.height / cell_h).floor() as usize;
+                                    let cols = cols.clamp(2, 500);
+                                    let rows = rows.clamp(1, 400);
+                                    let pixel_width = (f32::from(cell_w) * cols as f32) as u16;
+                                    let pixel_height = (f32::from(cell_h) * rows as f32) as u16;
+                                    entity.update(app, |shell, cx| {
+                                        let changed = shell.note_size(
+                                            session_id,
+                                            cols,
+                                            rows,
+                                            pixel_width,
+                                            pixel_height,
+                                            f32::from(bounds.origin.x),
+                                            f32::from(bounds.origin.y),
+                                            f32::from(cell_w),
+                                            f32::from(cell_h),
+                                        );
+                                        if changed {
+                                            cx.notify();
+                                        }
+                                        shell
+                                            .sessions
+                                            .get(&session_id)
+                                            .map(|session| (session.view.frame(), cell_w, cell_h))
+                                    })
+                                }
                             },
-                            |_, _, _, _| {},
+                            move |bounds, snap, window, app| {
+                                if let Some((frame, cell_w, cell_h)) = snap {
+                                    term_view::paint_frame(
+                                        &frame,
+                                        bounds.origin,
+                                        cell_w,
+                                        cell_h,
+                                        13.0,
+                                        window,
+                                        app,
+                                    );
+                                }
+                            },
                         )
                         .absolute()
                         .size_full(),
-                    ),
+                    )
+                    .when(editor_text.is_some(), |el| {
+                        let text = editor_text.clone().unwrap_or_default();
+                        el.child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .right_0()
+                                .bottom_0()
+                                .p(px(8.))
+                                .bg(theme::term_bg())
+                                .overflow_hidden()
+                                .font_family("DejaVu Sans Mono")
+                                .text_xs()
+                                .child(text)
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+                        )
+                    }),
             )
             .into_any_element()
     }
@@ -1187,10 +1879,20 @@ impl Shell {
                         div()
                             .text_xs()
                             .text_color(theme::muted())
-                            .child("Stop")
+                            .child("Hide")
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.agent_open = false;
-                                this.status = "Agent hidden".into();
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(theme::danger())
+                            .child("Stop")
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                this.stop_agent();
+                                this.agent_open = false;
                                 cx.notify();
                             })),
                     ),
@@ -1200,7 +1902,7 @@ impl Shell {
                     .p(px(12.))
                     .text_xs()
                     .text_color(theme::muted())
-                    .child("This is the docked agent column. The bundled agent is still the Node runtime in the Electron app, so this column does not spawn it yet."),
+                    .child("The bundled agent is the Node runtime. Open Agent on the tab strip starts it. Hide leaves the process running. Stop kills it."),
             )
             .into_any_element()
     }
@@ -1209,7 +1911,7 @@ impl Shell {
         let exited = self
             .active_session_id()
             .and_then(|id| self.sessions.get(&id))
-            .is_some_and(|session| session.exited);
+            .is_some_and(|session| session.view.exited());
         let left = if exited {
             "Local · Linux · exited".to_string()
         } else {
@@ -1232,6 +1934,7 @@ impl Shell {
             })
             .child(div().flex_1())
             .child(status_button(
+                Icon::Activity,
                 "Activity",
                 self.activity_open,
                 cx,
@@ -1240,6 +1943,7 @@ impl Shell {
                 },
             ))
             .child(status_button(
+                Icon::Transfer,
                 "Transfers",
                 self.transfers_open,
                 cx,
@@ -1247,10 +1951,16 @@ impl Shell {
                     this.transfers_open = !this.transfers_open;
                 },
             ))
-            .child(status_button("DevTerm", self.agent_open, cx, |this, _| {
-                this.agent_open = !this.agent_open;
-                this.agent_done = true;
-            }))
+            .child(status_button(
+                Icon::Agent,
+                "DevTerm",
+                self.agent_open,
+                cx,
+                |this, _| {
+                    this.agent_open = !this.agent_open;
+                    this.agent_done = true;
+                },
+            ))
     }
 
     fn render_git(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -1301,7 +2011,7 @@ impl Shell {
     fn render_modal(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let modal = self.modal?;
         let (title, body) = match modal {
-            Modal::Settings => ("Settings", settings_body()),
+            Modal::Settings => ("Settings", self.settings_body(cx)),
             Modal::Shortcuts => ("Keyboard shortcuts", shortcuts_body()),
             Modal::Palette => ("Command palette", palette_body(cx)),
         };
@@ -1342,7 +2052,7 @@ impl Shell {
                                 .items_center()
                                 .child(div().text_size(px(15.)).child(title))
                                 .child(div().flex_1())
-                                .child(div().text_color(theme::muted()).child("×").on_mouse_down(
+                                .child(glyph(Icon::Close, 14., theme::muted()).on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(|this, _, _, cx| {
                                         this.modal = None;
@@ -1365,10 +2075,11 @@ impl Focusable for Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let rail = self.render_rail(cx);
-        let library = self.render_library(cx);
+        let hide_chrome = self.focus_mode || self.zen_mode;
+        let rail = (!hide_chrome).then(|| self.render_rail(cx));
+        let library = (!hide_chrome).then(|| self.render_library(cx));
         let center = self.render_center(window, cx);
-        let git = self.render_git(cx);
+        let git = (!hide_chrome && self.git_open).then(|| self.render_git(cx));
         let modal = self.render_modal(cx);
         div()
             .id("devterm")
@@ -1382,10 +2093,10 @@ impl Render for Shell {
             .text_sm()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event, window, cx| this.on_key(event, window, cx)))
-            .child(rail)
-            .child(library)
+            .children(rail)
+            .children(library)
             .child(center)
-            .child(git)
+            .children(git)
             .children(modal)
     }
 }
@@ -1428,12 +2139,17 @@ fn pump_pty(id: u64, rx: std::sync::mpsc::Receiver<PtyMsg>, cx: &mut Context<She
             .update(cx, |shell, cx| {
                 if let Some(session) = shell.sessions.get_mut(&id) {
                     match msg {
-                        PtyMsg::Data(bytes) => session.grid.feed_bytes(&bytes),
-                        PtyMsg::Exit => {
-                            session.exited = true;
-                            session.live = None;
-                            session.grid.feed_bytes(b"\r\n[process exited]\r\n");
+                        PtyMsg::Data(bytes) => {
+                            session.view.push_bytes(&bytes);
+                            if let Some(cwd) = session.view.cwd().map(str::to_string) {
+                                let path = PathBuf::from(&cwd);
+                                if path.is_dir() && shell.files_cwd != path {
+                                    shell.files_cwd = path;
+                                    shell.reload_files();
+                                }
+                            }
                         }
+                        PtyMsg::Exit(code) => session.view.note_exit(code),
                     }
                 }
                 cx.notify();
@@ -1446,52 +2162,13 @@ fn pump_pty(id: u64, rx: std::sync::mpsc::Receiver<PtyMsg>, cx: &mut Context<She
     .detach();
 }
 
-fn spawn_shell() -> anyhow::Result<(LivePty, std::sync::mpsc::Receiver<PtyMsg>)> {
-    let system = native_pty_system();
-    let pair = system.openpty(PtySize {
-        rows: 24,
-        cols: 80,
-        pixel_width: 0,
-        pixel_height: 0,
-    })?;
-    let mut command = CommandBuilder::new(shell_program());
-    command.env("TERM", "xterm-256color");
-    command.env("COLORTERM", "truecolor");
-    if let Ok(cwd) = std::env::current_dir() {
-        command.cwd(cwd);
+fn hotkey_name(key: &str) -> String {
+    match key {
+        "pageup" | "page_up" => "PageUp".into(),
+        "pagedown" | "page_down" => "PageDown".into(),
+        "tab" => "Tab".into(),
+        other => other.to_string(),
     }
-    let child = pair.slave.spawn_command(command)?;
-    let mut reader = pair.master.try_clone_reader()?;
-    let writer = pair.master.take_writer()?;
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => {
-                    let _ = tx.send(PtyMsg::Exit);
-                    break;
-                }
-                Ok(n) => {
-                    if tx.send(PtyMsg::Data(buf[..n].to_vec())).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => {
-                    let _ = tx.send(PtyMsg::Exit);
-                    break;
-                }
-            }
-        }
-    });
-    Ok((
-        LivePty {
-            writer: Arc::new(Mutex::new(writer)),
-            master: pair.master,
-            child,
-        },
-        rx,
-    ))
 }
 
 fn shell_program() -> String {
@@ -1610,11 +2287,12 @@ fn display_path(path: &Path) -> String {
 }
 
 fn rail_button(
-    glyph: &'static str,
+    icon: Icon,
     active: bool,
     cx: &mut Context<Shell>,
     on_press: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Div {
+    let color = if active { theme::fg() } else { theme::muted() };
     div()
         .w(px(32.))
         .h(px(32.))
@@ -1622,10 +2300,10 @@ fn rail_button(
         .items_center()
         .justify_center()
         .rounded(px(4.))
-        .text_color(if active { theme::fg() } else { theme::muted() })
+        .text_color(color)
         .when(active, |el| el.bg(theme::accent_quiet()))
         .hover(|style| style.bg(theme::hover()).text_color(theme::fg()))
-        .child(glyph)
+        .child(glyph(icon, 16., color))
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, window, cx| {
@@ -1666,7 +2344,7 @@ fn button(
 }
 
 fn strip_button(
-    glyph: &'static str,
+    icon: Icon,
     cx: &mut Context<Shell>,
     on_press: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Div {
@@ -1679,7 +2357,7 @@ fn strip_button(
         .rounded(px(4.))
         .text_color(theme::muted())
         .hover(|style| style.bg(theme::hover()).text_color(theme::fg()))
-        .child(glyph)
+        .child(glyph(icon, 15., theme::muted()))
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, window, cx| {
@@ -1691,14 +2369,20 @@ fn strip_button(
 }
 
 fn status_button(
+    icon: Icon,
     label: &'static str,
     active: bool,
     cx: &mut Context<Shell>,
     on_press: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Div {
+    let color = if active { theme::fg() } else { theme::muted() };
     div()
-        .text_color(if active { theme::fg() } else { theme::muted() })
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .text_color(color)
         .hover(|style| style.text_color(theme::fg()))
+        .child(glyph(icon, 12., color))
         .child(label)
         .on_mouse_down(
             MouseButton::Left,
@@ -1798,7 +2482,7 @@ fn hint_key(chord: &'static str, label: &'static str) -> gpui::Div {
         .child(label)
 }
 
-fn dock_note(title: &'static str, body: &'static str) -> AnyElement {
+fn dock_note(title: &'static str, body: impl Into<String>) -> AnyElement {
     div()
         .h(px(72.))
         .px(px(12.))
@@ -1811,7 +2495,7 @@ fn dock_note(title: &'static str, body: &'static str) -> AnyElement {
             div()
                 .text_size(px(11.))
                 .text_color(theme::muted())
-                .child(body),
+                .child(body.into()),
         )
         .into_any_element()
 }
@@ -1843,23 +2527,6 @@ fn term_line(line: &str, cursor: Option<usize>) -> AnyElement {
                 .child(current.to_string()),
         )
         .child(after)
-        .into_any_element()
-}
-
-fn settings_body() -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(8.))
-        .text_xs()
-        .child(div().child("Theme · Tokyo Night"))
-        .child(div().text_color(theme::muted()).child(
-            "The same boot palette as the Electron app. The other eight themes move over with the settings store.",
-        ))
-        .child(div().child("Agent · DevTerm"))
-        .child(div().text_color(theme::muted()).child(
-            "The bundled agent is still the Node runtime. External CLIs stay launch-on-a-PTY work.",
-        ))
         .into_any_element()
 }
 

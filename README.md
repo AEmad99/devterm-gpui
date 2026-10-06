@@ -21,18 +21,24 @@ Colors are Tokyo Night, the same boot palette as the Electron app (`#16161e`, `#
 
 ## What works
 
-- Local shell via `portable-pty` (ConPTY on Windows, POSIX pty elsewhere)
-- Typing into that shell, including a small VT grid (cursor, erase, color sequences ignored)
-- Files list for the working directory
-- Concrete `Host` names from `~/.ssh/config`
-- Snippets that write into the active shell
-- `git status` for the working directory
-- Settings, shortcuts, and command palette
-- Shortcuts that match the Electron app: Ctrl+K, Ctrl+Shift+T, Ctrl+Shift+N, Ctrl+Shift+W, Ctrl+Shift+E, Ctrl+Alt+G, Ctrl+,, Ctrl+/
+- Local shell via `portable-pty` (in-box ConPTY on Windows; bundled `OpenConsole.exe` only when `DEVTERM_USE_BUNDLED_CONPTY=1` and `conpty.dll` is beside the executable)
+- `alacritty_terminal` grid: truecolor, scrollback, selection, bracketed paste, mouse tracking, focus reports, per-pane find
+- OSC 7 cwd and OSC 133 A/B, including the shell-integration strings the Electron app injects
+- Files follow that cwd, filter, and open in the editor (5 MiB limit, original newline on save, sanitized Markdown preview)
+- Settings JSON in the OS config directory, all ten themes, export/import without secrets
+- Focus mode and zen mode hide chrome and do not scale terminal text
+- SSH connect with `russh` (agent by default, TOFU known hosts, mismatch rejected, TCP no-delay)
+- Workspace save writes `workspaces.json`
+- DevTerm Agent launch uses the same command builder as the Electron app and spawns the bundled Node runtime when it is installed
+- `cargo test` ports the original logic tests (layout, SSH, transfers, agents, browser guard, search, settings, and the rest of `src/logic`)
 
-## What is still the Electron app
+## Package
 
-SSH sessions (`russh`), the full terminal parser (`alacritty_terminal`), the Node DevTerm Agent and the nine external CLIs, the in-app browser, SFTP transfers, and the workspace file. Those columns and buttons are in place so the window matches; they do not pretend to complete the session.
+```bash
+scripts/package-linux.sh
+```
+
+The Windows installer script is `packaging/devterm.nsi`. It does not require a bundled ConPTY. Unsigned builds should set `CSC_IDENTITY_AUTO_DISCOVERY=false` if Windows code-signing symlinks fail. App id stays `com.devterm.app`.
 
 ## Run
 
