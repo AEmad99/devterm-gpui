@@ -2,8 +2,8 @@
 //!
 //! The chrome follows the Electron app: a 40px icon rail, an optional library
 //! column, the group bar, pane tabs over the terminal, and a 22px status bar.
-//! Local shells are real PTYs. SSH, the agent process, and the browser pane
-//! are still the Electron app's job.
+//! Local shells are real PTYs. SSH, the editor, settings, and agent launch
+//! call the ported DevTerm logic directly.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -1094,9 +1094,35 @@ impl Shell {
                 }
             }
             Library::Workspaces => {
-                body.push(empty_copy(
-                    "No workspaces yet. The group bar Save button is the same action as the Electron app; the workspace file is not written in this slice.",
-                ));
+                let path = persist::user_data_dir().join("workspaces.json");
+                let saved = persist::read_text(&path)
+                    .ok()
+                    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+                let rows = saved
+                    .as_ref()
+                    .and_then(|value| value.get("workspaces"))
+                    .and_then(|value| value.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if rows.is_empty() {
+                    body.push(empty_copy(
+                        "No workspaces yet. Save on the group bar writes workspaces.json.",
+                    ));
+                }
+                for row in rows {
+                    let name = row
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Workspace");
+                    body.push(
+                        div()
+                            .px(px(8.))
+                            .py(px(6.))
+                            .text_sm()
+                            .child(name.to_string())
+                            .into_any_element(),
+                    );
+                }
             }
             Library::Snippets => {
                 for (name, detail, body_text) in SNIPPETS {
@@ -1213,9 +1239,24 @@ impl Shell {
                 "No agent activity yet. The bridge log arrives with the agent process.",
             )
         });
-        let transfers = self.transfers_open.then(|| {
-            dock_note("Transfers", "No transfers. The persistent SFTP queue stays on the Electron app until russh-sftp is wired.")
-        });
+        let transfer_note = {
+            let mut store = crate::logic::transfers::TransferStore::new(&persist::user_data_dir());
+            let items = store.load();
+            let running = items
+                .iter()
+                .filter(|item| {
+                    !item.done && item.paused != Some(true) && item.canceled != Some(true)
+                })
+                .count();
+            if items.is_empty() {
+                "No transfers.".to_string()
+            } else {
+                format!("{} queued, {running} running", items.len())
+            }
+        };
+        let transfers = self
+            .transfers_open
+            .then(|| dock_note("Transfers", transfer_note));
         let status = self.render_status(cx);
         let zen = self.zen_mode;
         let focus = self.focus_mode;
@@ -1835,7 +1876,7 @@ impl Shell {
                     .p(px(12.))
                     .text_xs()
                     .text_color(theme::muted())
-                    .child("This is the docked agent column. The bundled agent is still the Node runtime in the Electron app, so this column does not spawn it yet."),
+                    .child("The bundled agent is the Node runtime. Open Agent on the tab strip starts it. Hide leaves the process running. Stop kills it."),
             )
             .into_any_element()
     }
@@ -2400,7 +2441,7 @@ fn hint_key(chord: &'static str, label: &'static str) -> gpui::Div {
         .child(label)
 }
 
-fn dock_note(title: &'static str, body: &'static str) -> AnyElement {
+fn dock_note(title: &'static str, body: impl Into<String>) -> AnyElement {
     div()
         .h(px(72.))
         .px(px(12.))
@@ -2413,7 +2454,7 @@ fn dock_note(title: &'static str, body: &'static str) -> AnyElement {
             div()
                 .text_size(px(11.))
                 .text_color(theme::muted())
-                .child(body),
+                .child(body.into()),
         )
         .into_any_element()
 }
