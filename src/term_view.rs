@@ -920,22 +920,45 @@ pub fn terminal_font() -> gpui::Font {
 }
 
 /// Cell size from the real font metrics, not a fixed 7.8×18 guess.
+///
+/// Prefer the width of a shaped `"0"`. `ch_advance` on this GPUI build can
+/// come back many times larger than the glyphs that actually paint, which
+/// stretches one prompt across the pane. Reject a cell wider than twice the
+/// font size.
 pub fn measure_cell(window: &gpui::Window, font_px: f32) -> (Pixels, Pixels) {
     let font = terminal_font();
     let size = px(font_px);
     let id = window.text_system().resolve_font(&font);
-    let width = window.text_system().ch_advance(id, size).unwrap_or(px(8.0));
-    let height = window.text_system().ascent(id, size) + window.text_system().descent(id, size);
-    let width = if f32::from(width) < 1.0 {
-        px(8.0)
-    } else {
-        width
-    };
-    let height = if f32::from(height) < 1.0 {
-        px(font_px * 1.35)
-    } else {
-        height
-    };
+    let shaped = window.text_system().shape_line(
+        SharedString::from("0"),
+        size,
+        &[TextRun {
+            len: 1,
+            font: font.clone(),
+            color: gpui::rgb(0xffffff).into(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        }],
+        None,
+    );
+    let mut width = shaped.width;
+    if !(1.0..font_px * 2.0).contains(&f32::from(width)) {
+        width = window
+            .text_system()
+            .ch_advance(id, size)
+            .unwrap_or(px(font_px * 0.6));
+    }
+    if !(1.0..font_px * 2.0).contains(&f32::from(width)) {
+        width = px(font_px * 0.6);
+    }
+    let mut height = shaped.ascent + shaped.descent;
+    if !(font_px * 0.8..font_px * 2.5).contains(&f32::from(height)) {
+        height = window.text_system().ascent(id, size) + window.text_system().descent(id, size);
+    }
+    if !(font_px * 0.8..font_px * 2.5).contains(&f32::from(height)) {
+        height = px(font_px * 1.35);
+    }
     (width, height)
 }
 
@@ -999,26 +1022,36 @@ pub fn paint_frame(
                     color: Some(color),
                     wavy: false,
                 });
-                let run = TextRun {
-                    len: text.len(),
-                    font: font.clone(),
-                    color,
-                    background_color: None,
-                    underline,
-                    strikethrough: None,
-                };
-                let shaped = window.text_system().shape_line(
-                    SharedString::from(text),
-                    font_size,
-                    &[run],
-                    Some(cell_w * (cursor - start) as f32),
-                );
-                let _ = shaped.paint(
-                    point(origin.x + cell_w * start as f32, y),
-                    cell_h,
-                    window,
-                    cx,
-                );
+                // Paint each glyph in its own cell. Forcing the whole run to
+                // `cols * cell_w` letter-spaces the prompt across the pane when
+                // the shaper's advance does not match the cell.
+                for (offset, ch) in text.chars().enumerate() {
+                    if ch == ' ' {
+                        continue;
+                    }
+                    let column = start + offset;
+                    let glyph = ch.to_string();
+                    let run = TextRun {
+                        len: glyph.len(),
+                        font: font.clone(),
+                        color,
+                        background_color: None,
+                        underline: underline.clone(),
+                        strikethrough: None,
+                    };
+                    let shaped = window.text_system().shape_line(
+                        SharedString::from(glyph),
+                        font_size,
+                        &[run],
+                        None,
+                    );
+                    let _ = shaped.paint(
+                        point(origin.x + cell_w * column as f32, y),
+                        cell_h,
+                        window,
+                        cx,
+                    );
+                }
             }
             col = end;
         }

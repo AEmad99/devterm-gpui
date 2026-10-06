@@ -1741,23 +1741,6 @@ impl Shell {
                         }
                         cx.notify();
                     }))
-                    .when(editor_text.is_some(), |el| {
-                        let text = editor_text.clone().unwrap_or_default();
-                        el.child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .right_0()
-                                .bottom_0()
-                                .p(px(8.))
-                                .bg(theme::term_bg())
-                                .overflow_hidden()
-                                .font_family("DejaVu Sans Mono")
-                                .text_xs()
-                                .child(text),
-                        )
-                    })
                     .when(find_open, |el| {
                         el.child(
                             div()
@@ -1823,7 +1806,25 @@ impl Shell {
                         )
                         .absolute()
                         .size_full(),
-                    ),
+                    )
+                    .when(editor_text.is_some(), |el| {
+                        let text = editor_text.clone().unwrap_or_default();
+                        el.child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .right_0()
+                                .bottom_0()
+                                .p(px(8.))
+                                .bg(theme::term_bg())
+                                .overflow_hidden()
+                                .font_family("DejaVu Sans Mono")
+                                .text_xs()
+                                .child(text)
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+                        )
+                    }),
             )
             .into_any_element()
     }
