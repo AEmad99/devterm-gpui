@@ -467,17 +467,27 @@ impl TermView {
         motion: bool,
     ) -> bool {
         let mode = *self.term.mode();
-        let tracking = mode.intersects(TermMode::MOUSE_MODE);
-        if tracking && (pressed || motion || !pressed) {
+        if mode.intersects(TermMode::MOUSE_MODE) {
             let report = mouse_report(mode, button, col, row, pressed, motion);
             if !report.is_empty() {
                 self.write(&report);
                 return true;
             }
+            // Click tracking owns the button. A move with the button up must
+            // not fall through into text selection.
+            if !motion && mode.contains(TermMode::MOUSE_REPORT_CLICK) {
+                return true;
+            }
         }
-        if motion && self.selecting {
-            self.update_selection(col, row);
-            return true;
+        // Motion only extends a drag that is already in progress. Passing
+        // `pressed = false` for a hover used to take the button-up path and
+        // keep moving the selection end, so sweeping the pointer highlighted
+        // the pane.
+        if motion {
+            if self.selecting {
+                self.update_selection(col, row);
+            }
+            return self.selecting;
         }
         if pressed && button == MouseButton::Left {
             self.selecting = true;
@@ -489,13 +499,17 @@ impl TermView {
             ));
             return true;
         }
-        if !pressed && button == MouseButton::Left {
-            self.selecting = false;
+        if !pressed && button == MouseButton::Left && self.selecting {
             self.update_selection(col, row);
+            self.selecting = false;
+            if self
+                .selection_text()
+                .map(|text| text.trim().is_empty())
+                .unwrap_or(true)
+            {
+                self.term.selection = None;
+            }
             return true;
-        }
-        if pressed && button == MouseButton::Right {
-            return false;
         }
         false
     }
@@ -1133,6 +1147,40 @@ mod tests {
         assert_eq!(report, b"\x1b[<0;1;1M");
         view.push_bytes(b"\x1b[?1004h");
         assert!(view.term.mode().contains(TermMode::FOCUS_IN_OUT));
+    }
+
+    #[test]
+    fn moving_the_pointer_does_not_highlight_the_pane() {
+        let mut view = TermView::open(20, 6, 100);
+        view.push_bytes(b"hello world\r\nsecond line\r\n");
+        assert!(view.mouse(MouseButton::Left, 1, 0, false, true) == false);
+        assert!(view.mouse(MouseButton::Left, 10, 1, false, true) == false);
+        let highlighted = view
+            .frame()
+            .cells
+            .iter()
+            .filter(|cell| cell.selected)
+            .count();
+        assert_eq!(highlighted, 0);
+
+        view.mouse(MouseButton::Left, 0, 0, true, false);
+        view.mouse(MouseButton::Left, 4, 0, true, true);
+        let dragged = view
+            .frame()
+            .cells
+            .iter()
+            .filter(|cell| cell.selected)
+            .count();
+        assert!(dragged > 0, "a held drag should select cells");
+        view.mouse(MouseButton::Left, 4, 0, false, false);
+        view.mouse(MouseButton::Left, 12, 1, false, true);
+        let after = view
+            .frame()
+            .cells
+            .iter()
+            .filter(|cell| cell.selected)
+            .count();
+        assert_eq!(after, dragged);
     }
 
     #[test]

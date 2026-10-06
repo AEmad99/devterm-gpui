@@ -639,27 +639,28 @@ impl Shell {
         }
     }
 
-    fn pointer(&mut self, id: u64, x: f32, y: f32, down: bool, motion: bool) {
+    fn pointer(&mut self, id: u64, x: f32, y: f32, down: bool, motion: bool) -> bool {
+        if motion && !self.dragging {
+            return false;
+        }
         if !motion {
             self.dragging = down;
         }
         let Some(session) = self.sessions.get_mut(&id) else {
-            return;
+            return false;
         };
         if session.cell_w < 1.0 || session.cell_h < 1.0 {
-            return;
+            return false;
         }
         let col = ((x - session.origin_x) / session.cell_w).floor().max(0.0) as usize;
         let row = ((y - session.origin_y) / session.cell_h).floor().max(0.0) as usize;
-        if motion {
-            let _ = session
-                .view
-                .mouse(term_view::MouseButton::Left, col, row, false, true);
-            return;
-        }
-        let _ = session
-            .view
-            .mouse(term_view::MouseButton::Left, col, row, down, false);
+        session.view.mouse(
+            term_view::MouseButton::Left,
+            col,
+            row,
+            down && !motion,
+            motion,
+        )
     }
 
     fn filter_key(&mut self, key: &str, event: &KeyDownEvent) {
@@ -1718,37 +1719,41 @@ impl Shell {
                         cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                             window.focus(&this.focus);
                             this.select_tab(index, session_id);
-                            this.pointer(
+                            if this.pointer(
                                 session_id,
                                 event.position.x.into(),
                                 event.position.y.into(),
                                 true,
                                 false,
-                            );
-                            cx.notify();
+                            ) {
+                                cx.notify();
+                            }
                         }),
                     )
                     .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
-                        this.pointer(
+                        let dragging = this.dragging;
+                        if this.pointer(
                             session_id,
                             event.position.x.into(),
                             event.position.y.into(),
+                            dragging,
                             true,
-                            true,
-                        );
-                        cx.notify();
+                        ) {
+                            cx.notify();
+                        }
                     }))
                     .on_mouse_up(
                         MouseButton::Left,
                         cx.listener(move |this, event: &MouseUpEvent, _, cx| {
-                            this.pointer(
+                            if this.pointer(
                                 session_id,
                                 event.position.x.into(),
                                 event.position.y.into(),
                                 false,
                                 false,
-                            );
-                            cx.notify();
+                            ) {
+                                cx.notify();
+                            }
                         }),
                     )
                     .on_scroll_wheel(cx.listener(move |this, event: &ScrollWheelEvent, _, cx| {
